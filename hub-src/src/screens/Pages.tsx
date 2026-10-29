@@ -11,6 +11,7 @@ import { videosFor, courseFor, readingFor, subjectReading, CREDITS } from "../co
 import { hasQuiz, Quiz } from "../ui/Quiz";
 import { latestQuiz, activeDays, streakOf } from "../core/progress";
 import { SUBJECT as SUBJ } from "../core/catalog";
+import { dsaMastery } from "../core/practice-bridge";
 
 const d = (s: string) => parse(s).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
 
@@ -93,7 +94,7 @@ export function PracticeScreen(ctx: Ctx) {
       <div class="row"><Button kind="primary" size="lg" onClick={() => api.openPractice()}><Icon.play /> Solve next problem</Button></div>
     </div>
     {pats.length > 0 && <Section title="DSA patterns from your practice">
-      <ul class="mini-bars wide">{pats.map((p) => { const v = Math.min(1, (p.alone + 0.5 * p.help) / Math.max(p.planned, 10)); return <li><span>{p.name}</span><Bar value={v} label={p.name} /><b>{p.alone + p.help}/{p.planned || "-"}</b></li>; })}</ul>
+      <ul class="mini-bars wide">{pats.map((p) => { const v = dsaMastery(p) || 0; return <li><span>{p.name}</span><Bar value={v} label={p.name} /><b>{p.alone + p.help}/{p.planned || "-"}</b></li>; })}</ul>
     </Section>}
     <Section title="Quizzes and mock interviews">
       <Empty title="Coming in the next update" body="Short quizzes for OOPS, OS, DBMS and CN, and mock rounds for LLD and System Design. Until then, sessions use a guided learn, practise, review checklist." />
@@ -124,7 +125,7 @@ export function ProgressScreen(ctx: Ctx) {
       })}</ul>
     </Section>
     <details class="more"><summary>How these numbers are calculated</summary>
-      <p>DSA comes from your practice app: problems solved alone count fully, with help half, against the problems planned per pattern. For OOPS, OS, DBMS and CN, a topic's latest quiz score counts 60% and study time against its planned time 40%. Before you take a topic's quiz, your self-rating after sessions stands in for it. LLD and System Design use time and self-rating until mock rounds arrive.</p>
+      <p>DSA comes from your practice app. Recorded Think-first solves without opening the solution count fully; other alone marks count half, and help counts a quarter. For OOPS, OS, DBMS and CN, a topic's latest quiz score counts 60% and study time against its planned time 40%. Before you take a topic's quiz, your self-rating after sessions stands in for it. LLD and System Design use time and self-rating until mock rounds arrive.</p>
     </details>
   </div>;
 }

@@ -25,11 +25,32 @@ const WATCH = `(() => { if (window.__dsaWatch) return; window.__dsaWatch = true;
     .observe(document.documentElement, { childList: true, subtree: true });
   check(); })();`;
 
+// The editor normally occupies the right side. This is a visual aid, not a security boundary;
+// its position may need adjustment when LeetCode changes its layout.
+const coverScript = (on) => `(() => {
+  window.__dsaCoverOn = ${on ? "true" : "false"};
+  let cover = document.getElementById("__dsaCover");
+  if (!window.__dsaCoverOn) { if (cover) cover.remove(); return; }
+  if (!cover) {
+    cover = document.createElement("div"); cover.id = "__dsaCover"; cover.setAttribute("role", "note");
+    cover.style.cssText = "position:fixed;top:0;right:0;bottom:0;width:55%;z-index:2147483647;display:flex;align-items:center;justify-content:center;padding:32px;text-align:center;background:rgba(21,26,33,.94);color:#E4E8EE;font:600 16px/1.5 system-ui,sans-serif;box-sizing:border-box";
+    cover.textContent = "Think first. Answer the questions in the sidebar, then the editor opens.";
+    document.documentElement.appendChild(cover);
+  }
+  if (!window.__dsaKeyGuard) {
+    window.__dsaKeyGuard = true;
+    for (const type of ["keydown", "keypress", "beforeinput", "paste", "drop"]) document.addEventListener(type, event => {
+      if (window.__dsaCoverOn && !(event.ctrlKey && event.altKey)) { event.preventDefault(); event.stopPropagation(); }
+    }, true);
+  }
+})();`;
+
 class LeetCodeView {
   /** @param {{ send:(ch:string, data?:any)=>void, ua?:string, onUrl:(url:string)=>void }} opts */
   constructor({ send, ua, onUrl }) {
     this.send = send;
     this.focusMode = false;
+    this.coverOn = false;
     this.ses = session.fromPartition(PARTITION);
     // Look like a normal Chrome. After a browser login we reuse that browser's exact identity.
     this.ses.setUserAgent(ua || this.ses.getUserAgent().replace(/\s?Electron\/\S+/, "").replace(/\s?dsa-practice\/\S+/, ""));
@@ -56,7 +77,14 @@ class LeetCodeView {
     };
     wc.on("did-navigate", nav);
     wc.on("did-navigate-in-page", nav);
-    wc.on("dom-ready", () => { if (isLeetCode(wc.getURL())) wc.executeJavaScript(WATCH).catch(() => {}); });
+    wc.on("dom-ready", () => {
+      if (!isLeetCode(wc.getURL())) return;
+      wc.executeJavaScript(WATCH).catch(() => {});
+      if (this.coverOn) wc.executeJavaScript(coverScript(true)).catch(() => {});
+    });
+    wc.on("did-navigate-in-page", () => {
+      if (this.coverOn && isLeetCode(wc.getURL())) wc.executeJavaScript(coverScript(true)).catch(() => {});
+    });
     wc.on("console-message", ({ message: msg }) => {
       if (msg === "__DSA_NEED_LOGIN__") send("need-login");
       else if (typeof msg === "string" && msg.startsWith("__DSA_ACCEPTED__:")) send("accepted", msg.slice(17));
@@ -76,6 +104,26 @@ class LeetCodeView {
     if (h ? h.canGoBack() : this.wc.canGoBack()) h ? h.goBack() : this.wc.goBack();
   }
   url() { return this.wc.getURL(); }
+
+  /** Fetch statement HTML and tags in the LeetCode session; callers must not persist the HTML. */
+  async problemMeta(slug) {
+    if (typeof slug !== "string" || !/^[a-z0-9-]+$/.test(slug) || !isLeetCode(this.url())) return null;
+    let timer;
+    try {
+      const body = JSON.stringify({ query: "query q($s: String!) { question(titleSlug: $s) { content topicTags { name } } }", variables: { s: slug } });
+      const script = `(async () => { const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), 5500); try { const r = await fetch("/graphql/", { method: "POST", credentials: "include", signal: controller.signal, headers: { "content-type": "application/json", "x-csrftoken": (document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || "" }, body: ${JSON.stringify(body)} }); const j = r.ok ? await r.json() : null; return j?.data?.question || null; } catch { return null; } finally { clearTimeout(timer); } })()`;
+      const answer = await Promise.race([this.wc.executeJavaScript(script), new Promise(resolve => { timer = setTimeout(() => resolve(null), 6000); })]);
+      if (!answer || !isLeetCode(this.url())) return null;
+      return { content: typeof answer.content === "string" ? answer.content : "", tags: Array.isArray(answer.topicTags) ? answer.topicTags.filter(t => t && typeof t.name === "string").map(t => t.name) : [] };
+    } catch { return null; }
+    finally { clearTimeout(timer); }
+  }
+
+  setCover(on) {
+    this.coverOn = !!on;
+    if (isLeetCode(this.url())) this.wc.executeJavaScript(coverScript(this.coverOn)).catch(() => {});
+    return this.coverOn;
+  }
 
   setFocus(on) {
     this.focusMode = !!on;
@@ -135,4 +183,4 @@ class LeetCodeView {
   }
 }
 
-module.exports = { LeetCodeView, isLeetCode, HOME };
+module.exports = { LeetCodeView, isLeetCode, HOME, coverScript };

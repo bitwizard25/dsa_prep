@@ -12,6 +12,8 @@ contextBridge.exposeInMainWorld("api", {
   home: inv("lc:home"),
   back: inv("lc:back"),
   url: inv("lc:url"),
+  problemMeta: inv("lc:meta"),
+  cover: inv("lc:cover"),
   setFocus: inv("focus:set"),
   authStatus: inv("auth:status"),
   loginBrowser: inv("auth:browser"),

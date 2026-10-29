@@ -33,6 +33,8 @@ function registerIpc(appWin) {
   h("lc:home", () => lc.home());
   h("lc:back", () => lc.back());
   h("lc:url", () => lc.url());
+  h("lc:meta", (slug) => lc.problemMeta(slug));
+  h("lc:cover", (on) => lc.setCover(!!on));
   h("focus:set", (on) => lc.setFocus(on));
 
   // login

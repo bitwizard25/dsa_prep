@@ -3,8 +3,9 @@ import { PROBLEMS, PATTERNS } from "../../../src/renderer/data/dataset.js";
 // The practice app's own scheduling code and problem table: the Hub never re-derives DSA days its own way.
 import { schedule } from "../../../src/renderer/core/plan.js";
 import { BY_SLUG } from "../../../src/renderer/core/problems.js";
+import { isVerifiedAlone } from "../../../src/renderer/core/reasoning.js";
 
-export interface DsaPattern { name: string; alone: number; help: number; planned: number }
+export interface DsaPattern { name: string; alone: number; help: number; planned: number; verified: number }
 export interface DsaSummary {
   hasPlan: boolean; source: string; patterns: Record<string, DsaPattern>; soloToday: number; doneToday: number; streakDays: number; activeDays: string[];
   todayTotal: number; todayLeft: number; leftovers: number;         // from the practice app's schedule
@@ -15,7 +16,7 @@ const patternOf = new Map<string, string>((PROBLEMS as any[]).map((p) => [p[0], 
 
 export function summarizeDsa(raw: any, today: string): DsaSummary {
   const patterns: Record<string, DsaPattern> = {};
-  for (const name of PATTERNS as string[]) patterns[name] = { name, alone: 0, help: 0, planned: 0 };
+  for (const name of PATTERNS as string[]) patterns[name] = { name, alone: 0, help: 0, planned: 0, verified: 0 };
   const empty = { todayTotal: 0, todayLeft: 0, leftovers: 0, todayPatterns: [], todayTitles: [], nextSlug: null };
   if (!raw || raw.version !== 2) return { hasPlan: false, source: "", patterns, soloToday: 0, doneToday: 0, streakDays: 0, activeDays: [], ...empty };
   const status: Record<string, string> = raw.progress?.status || {};
@@ -26,7 +27,8 @@ export function summarizeDsa(raw: any, today: string): DsaSummary {
   for (const [slug, st] of Object.entries(status)) {
     const pt = patternOf.get(slug);
     if (!pt) continue;
-    if (st === "a") patterns[pt].alone++; else if (st === "h") patterns[pt].help++;
+    if (st === "a") { patterns[pt].alone++; if (isVerifiedAlone(raw.progress, slug)) patterns[pt].verified++; }
+    else if (st === "h") patterns[pt].help++;
   }
   const doneToday = Object.values(when).filter((d) => d === today).length;
   const soloToday = Object.entries(when).filter(([s, d]) => d === today && status[s] === "a").length;
@@ -49,8 +51,8 @@ export function summarizeDsa(raw: any, today: string): DsaSummary {
   return { hasPlan: !!prof.onboarded, source: names, patterns, soloToday, doneToday, streakDays: 0, activeDays, ...day };
 }
 
-/** DSA mastery for one pattern from real practice: solved alone counts fully, with help half. */
+/** Recorded Think-first solves count fully, other alone marks half, and help a quarter. */
 export function dsaMastery(p: DsaPattern | undefined, perPattern = 30): number | null {
   if (!p || p.alone + p.help === 0) return null;
-  return Math.min(1, (p.alone + 0.5 * p.help) / Math.max(p.planned || perPattern, 10));
+  return Math.min(1, (p.verified + 0.5 * (p.alone - p.verified) + 0.25 * p.help) / Math.max(p.planned || perPattern, 10));
 }

@@ -1,4 +1,5 @@
 // Practice logic: today's list, leftovers, next problem, marking, streaks, energy.
+import * as R from "./reasoning.js";
 import { store } from "./state.js";
 import { BY_SLUG } from "./problems.js";
 import { schedule } from "./plan.js";
@@ -84,7 +85,7 @@ export function redoResult(slug, ok) {
   } else { r.stage = 0; r.due = dueIn(REDO_GAPS[0]); }
   store.save();
 }
-const problemOf = (slug) => BY_SLUG.get(slug) || (S().profile.custom || []).find((p) => p.slug === slug);
+export const problemOf = (slug) => BY_SLUG.get(slug) || (S().profile.custom || []).find((p) => p.slug === slug);
 export const redoDue = () => Object.entries(redos()).filter(([, r]) => r.due <= todayKey()).map(([slug, r]) => ({ ...problemOf(slug), redo: r })).filter((p) => p.slug);
 export const redoAll = () => Object.entries(redos()).sort((a, b) => (a[1].due < b[1].due ? -1 : 1)).map(([slug, r]) => ({ ...problemOf(slug), redo: r })).filter((p) => p.slug);
 export const REDO_STAGES = REDO_GAPS.length;
@@ -142,3 +143,6 @@ export function stats() {
 }
 
 export { parse, diffDays };
+
+export function recordAttempt(slug, rec) { R.recordAttempt(S().progress, slug, rec); store.save(); }
+export function lastInsight(slug) { const list = S().progress.attempts?.[slug] || []; for (let i = list.length - 1; i >= 0; i--) if (list[i].explain?.insight) return list[i].explain.insight; return ""; }

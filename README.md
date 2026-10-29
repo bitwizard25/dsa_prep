@@ -1,6 +1,8 @@
-# DSA Practice 2.2: Prep Hub + Practice
+# DSA Practice 2.3: Prep Hub + Practice
 
 Interview preparation hub (Prep) plus the DSA practice app (Practice), in one desktop app. No AI, no API keys: plans and recommendations come from rules and curated data.
+
+Think-first asks for a complexity target, brute-force approach, wasted work, and a pattern before opening the editor. After an Accepted submission, record a key insight for later review. The Hub gives full weight to attempts that meet the recorded Think-first criteria; manual alone marks and assisted solves receive partial weight. The editor cover and solution detection are aids, and cannot detect activity outside the app. When problem details are unavailable, the app falls back to the local pattern and skips the complexity check.
 
 Personal LeetCode practice app. Pick a company, set your hours, and it builds a day-by-day plan.
 LeetCode runs on the right, your plan, timer and progress on the left. Everything stays on your PC.
@@ -20,6 +22,8 @@ Requires Node.js 22.12 or newer and npm. Install both the desktop and Hub depend
     npm run check         # regression tests and Hub TypeScript check
     npm run build:hub     # production Hub build
     npm run smoke         # hidden Electron windows, temporary data; requires a desktop session
+    npx electron tests/smoke-think.cjs   # offline Think-first flow
+    npx electron tests/electron-cover.cjs # editor cover
     npm audit
     npm audit --prefix hub-src
 

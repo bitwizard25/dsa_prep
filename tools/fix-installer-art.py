@@ -5,6 +5,8 @@ from PIL import Image, ImageDraw, ImageFont
 VER = sys.argv[1] if len(sys.argv) > 1 else "2.0"
 D = os.path.join(os.path.dirname(__file__), "..", "build-assets")
 FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+if not os.path.exists(FONT):
+    FONT = os.path.join(os.environ.get("WINDIR", "C:/Windows"), "Fonts", "arial.ttf")
 
 def find_text(im, x0, x1, y0, y1, delta):
     g = im.convert("L"); hits = []

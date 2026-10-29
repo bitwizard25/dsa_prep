@@ -1,11 +1,12 @@
 // Controller: owns screen state, routes events to actions, and re-renders.
 import { store, freshProfile } from "./core/state.js";
+import * as R from "./core/reasoning.js";
 import * as P from "./core/practice.js";
 import * as T from "./core/timer.js";
 import * as Onb from "./screens/onboarding.js";
 import * as Ws from "./screens/workspace.js";
 import { parseImport, patternCounts, PATTERNS } from "./core/problems.js";
-import { fmt, addDays } from "./core/dates.js";
+import { fmt, addDays, todayKey } from "./core/dates.js";
 import { silkUrl } from "./ui/silk.js";
 
 // Silk textures, generated once.
@@ -38,7 +39,7 @@ function applyLayout() {
   document.documentElement.style.setProperty("--sbw", ws ? (ui.collapsed ? 64 : ui.width) + "px" : "100%");
   api.layout({ mode: ws ? "workspace" : "onboarding", width: ui.width, collapsed: ui.collapsed });
 }
-function go(route) { ctx.route = route; applyLayout(); syncFocus(); render(); }
+function go(route) { ctx.route = route; applyLayout(); syncFocus(); syncCover(); render(); }
 
 let flashT;
 function flash(msg) { ctx.flash = msg; render(); clearTimeout(flashT); flashT = setTimeout(() => { ctx.flash = ""; render(); }, 4000); }
@@ -137,7 +138,7 @@ function resetPlanProgress() {
     keeps: [[true, "the same companies, patterns and hours"], [true, "your streak and notes"], [false, "Alone / Help marks and redos for this plan's problems"]],
     run: () => {
       const pr = store.S.progress;
-      for (const p of P.planned()) { delete pr.status[p.slug]; delete pr.when[p.slug]; delete (pr.redo || {})[p.slug]; }
+      for (const p of P.planned()) { delete pr.status[p.slug]; delete pr.when[p.slug]; delete (pr.redo || {})[p.slug]; delete (pr.attempts || {})[p.slug]; }
       const d = Onb.newDraft(); d.skipSolved = false; commitPlan(d);
       ctx.view = new Date(); render(); flash("Progress reset. The plan starts again from today.");
     } });
@@ -170,25 +171,55 @@ function openNext() {
 function markCurrent(st) {
   const known = P.planned().find((p) => p.slug === ctx.curSlug);
   if (!known) { flash("Open a problem from your plan first."); return; }
+  P.recordAttempt(ctx.curSlug, buildRecord(ctx.attempt?.slug === ctx.curSlug ? ctx.attempt : null, st, { accepted: false, manual: true }));
   P.setMark(ctx.curSlug, st);
   flash(`Marked "${known.title}" as ${st === "a" ? "solved alone" : "needed help"}. Ctrl+Alt+N for the next one.`);
 }
-function toggleTimer() { T.toggle(); ctx.showFull = false; syncFocus(); render(); }
+function toggleTimer() { if (gating() && !store.S.timer.running) { flash("Finish Think-first or skip it before starting the timer."); return; } T.toggle(); ctx.showFull = false; syncFocus(); render(); }
 
 // One tap: open the next problem (unless you're already on an unsolved one) and start the focus timer.
 function oneTapStart() {
   const onPlanned = P.planned().some((p) => p.slug === ctx.curSlug && !P.isDone(p.slug)) || P.redoDue().some((p) => p.slug === ctx.curSlug);
   if (!onPlanned) { const p = P.nextUnsolved(ctx.curSlug); if (p) { ctx.curSlug = p.slug; api.open(p.slug); beginAttempt(p.slug); } }
-  if (!store.S.timer.running) T.toggle();
+  if (!store.S.timer.running && !gating()) T.toggle();
   ctx.showFull = false; syncFocus(); render();
 }
 
+const needsGate = (slug) => (P.planned().some(p => p.slug === slug) && !P.isDone(slug)) || P.redoDue().some(p => p.slug === slug);
+const gating = () => !!(ctx.route === "workspace" && ctx.attempt?.slug === ctx.curSlug && ctx.attempt.gate && !ctx.attempt.unlocked);
+function syncCover() { api.cover(gating()).catch(() => {}); }
 function beginAttempt(slug) {
-  if (!slug || (ctx.attempt && ctx.attempt.slug === slug)) return;
-  ctx.attempt = { slug, start: Date.now(), sawAt: null };
+  if (!slug || ctx.attempt?.slug === slug) return;
+  const gate = needsGate(slug);
+  const attempt = ctx.attempt = { slug, start: Date.now(), sawAt: null, gate, unlocked: !gate, unlockedAt: gate ? null : Date.now(),
+    think: { complexity: "", brute: "", waste: "", pattern: null, patternTries: 0, patternCorrect: false, skipped: false }, facts: null, nudge: "" };
+  if (gate && store.S.ui.collapsed) { store.S.ui.collapsed = false; store.save(); applyLayout(); }
+  if (gate && store.S.timer?.running && store.S.timer.mode === "work") T.toggle();
+  syncCover();
+  if (gate) loadFacts(attempt);
+}
+async function loadFacts(attempt) {
+  const primary = P.problemOf(attempt.slug)?.pi ?? -1;
+  let meta = null;
+  try { meta = await api.problemMeta(attempt.slug); } catch {}
+  if (ctx.attempt !== attempt) return;
+  const c = R.parseConstraints(meta?.content || "");
+  attempt.facts = { n: c.n, lines: c.lines, tags: meta?.tags || [], accepted: R.acceptedPatterns(primary, meta?.tags || []), live: !!meta };
+  if (document.activeElement?.dataset?.think) return; // do not erase text while typing
+  render();
+}
+function unlock() {
+  const a = ctx.attempt; a.unlocked = true; a.unlockedAt = Date.now(); a.nudge = "";
+  syncCover();
+  if (!store.S.timer.running && store.S.timer.mode !== "break") T.toggle();
+  syncFocus(); render();
+}
+function buildRecord(a, result, { accepted, manual, explain = null }) {
+  return { at: todayKey(), think: a?.gate ? { ...a.think } : null, n: a?.facts?.n ?? null, tags: a?.facts?.tags || [],
+    sawSolution: !!a?.sawAt, accepted: !!accepted, explain, result, manual: !!manual };
 }
 const attemptMins = () => (ctx.attempt ? Math.max(0, Math.round((Date.now() - ctx.attempt.start) / 60000)) : 0);
-function toggleSidebar() { store.S.ui.collapsed = !store.S.ui.collapsed; store.save(); applyLayout(); render(); }
+function toggleSidebar() { if (gating() && !store.S.ui.collapsed) { flash("Finish Think-first before collapsing the sidebar."); return; } store.S.ui.collapsed = !store.S.ui.collapsed; store.save(); applyLayout(); render(); }
 
 // ---------- actions ----------
 const actions = {
@@ -225,14 +256,30 @@ const actions = {
 
   // workspace
   open: (el) => { ctx.curSlug = el.dataset.slug; beginAttempt(el.dataset.slug); api.open(el.dataset.slug); render(); },
-  mark: (el) => { P.mark(el.dataset.slug, el.dataset.st); render(); },
+  mark: (el) => { const slug = el.dataset.slug, st = el.dataset.st;
+    if (P.status(slug) !== st) P.recordAttempt(slug, buildRecord(ctx.attempt?.slug === slug ? ctx.attempt : null, st, { accepted: false, manual: true }));
+    P.mark(slug, st); render(); },
+  "think-unlock": () => { const a = ctx.attempt; if (!a || !gating()) return;
+    if (!a.facts) { a.nudge = "Checking problem details. You can also skip this step."; render(); return; }
+    const { problems, patternRight } = R.checkThink(a.think, a.facts);
+    if (problems.length) { a.nudge = problems[0]; render(); return; }
+    a.think.patternTries++; a.think.patternCorrect = patternRight === true;
+    if (patternRight === false && a.think.patternTries < 2) { a.nudge = "That pattern may not fit. Re-read the constraints and your brute force."; render(); return; }
+    if (patternRight !== true) a.think.patternUnconfirmed = true;
+    unlock(); },
+  "think-skip": () => { if (!gating()) return; ctx.attempt.think.skipped = true; unlock(); },
   next: openNext,
   timer: toggleTimer,
   start: oneTapStart,
   "mark-cur": (el) => { markCurrent(el.dataset.st); },
-  "accept-mark": (el) => { P.setMark(ctx.accepted.slug, el.dataset.st); ctx.accepted = null; flash(el.dataset.st === "a" ? "Marked as solved alone." : "Marked as needed help. It comes back for a redo in 3 days."); },
+  "accept-mark": (el) => { const a = ctx.accepted, st = el.dataset.st; if (!a || (st === "a" && !a.elig.alone)) return;
+    if (!R.wordsOk(a.insight)) { flash("Write the key insight in a few words first."); return; }
+    const own = ctx.attempt?.slug === a.slug ? ctx.attempt : null;
+    P.recordAttempt(a.slug, buildRecord(own, st, { accepted: true, manual: false, explain: { why: a.why.trim(), insight: a.insight.trim() } }));
+    if (P.redoDue().some(p => p.slug === a.slug)) P.redoResult(a.slug, st === "a"); else P.setMark(a.slug, st);
+    ctx.accepted = null; flash(st === "a" ? "Marked as solved alone. Your insight is saved for the redo." : "Marked as needed help. It comes back for a redo."); },
   "accept-dismiss": () => { ctx.accepted = null; render(); },
-  redo: (el) => { P.redoResult(el.dataset.slug, el.dataset.ok === "1"); flash(el.dataset.ok === "1" ? "Nice. Next redo is scheduled further out." : "No problem. It comes back in 3 days."); },
+  redo: (el) => { const slug = el.dataset.slug; P.recordAttempt(slug, buildRecord(ctx.attempt?.slug === slug ? ctx.attempt : null, el.dataset.ok === "1" ? "a" : "h", { accepted: false, manual: true })); P.redoResult(slug, el.dataset.ok === "1"); flash(el.dataset.ok === "1" ? "Nice. Next redo is scheduled further out." : "No problem. It comes back in 3 days."); },
   replan: () => { P.replan(); ctx.view = new Date(); flash("Re-planned from today. Your finish date moved, nothing was lost."); },
   "show-full": () => { ctx.showFull = true; render(); },
   "timer-reset": () => { T.reset(); syncFocus(); render(); },
@@ -275,6 +322,9 @@ document.addEventListener("mousedown", (e) => {
 
 document.addEventListener("input", (e) => {
   const t = e.target;
+  if (t.dataset?.think && ctx.attempt && t.tagName !== "SELECT") ctx.attempt.think[t.dataset.think] = t.value;
+  if (t.id === "exWhy" && ctx.accepted) ctx.accepted.why = t.value;
+  if (t.id === "exInsight" && ctx.accepted) ctx.accepted.insight = t.value;
   if (t.id === "import") { ctx.importText = t.value; const n = parseImport(t.value).length; const s = t.parentElement.querySelector(".muted"); if (s) s.textContent = `${n} problems recognised`; const b = t.parentElement.querySelector("[data-act=use-import]"); if (b) b.disabled = !n; }
   if (t.id === "hours") {                       // live update without re-rendering (keeps the slider dragging)
     ctx.draft.hoursPerDay = ctx.draft.hoursManual = +t.value;
@@ -291,6 +341,7 @@ document.addEventListener("input", (e) => {
 
 document.addEventListener("change", (e) => {
   const t = e.target;
+  if (t.dataset?.think && ctx.attempt && t.tagName === "SELECT") ctx.attempt.think[t.dataset.think] = t.dataset.think === "pattern" ? (t.value === "" ? null : +t.value) : t.value;
   if (t.id === "targetDate" && t.value) { ctx.draft.targetDate = t.value; render(); }
   if (t.id === "startDate" && t.value) { ctx.draft.startDate = t.value; render(); }
   if (t.id === "skipSolved") { ctx.draft.skipSolved = t.checked; render(); }
@@ -316,6 +367,7 @@ api.onUrl(async (u) => {
   const m = u.match(/leetcode\.com\/problems\/([^/?#]+)/);
   const slug = m ? m[1] : "";
   if (slug) beginAttempt(slug);
+  if (!slug) api.cover(false).catch(() => {});
   // Opening the editorial or community solutions: note it, and warn if it's early.
   if (slug && /\/problems\/[^/]+\/(editorial|solutions)(\/|$|\?)/.test(u) && ctx.attempt && ctx.attempt.slug === slug && !ctx.attempt.sawAt) {
     ctx.attempt.sawAt = Date.now();
@@ -325,17 +377,19 @@ api.onUrl(async (u) => {
       : `Solution opened after ${mins} min. Fair. Read the approach only, then code it yourself.`);
   }
   const typing = ["TEXTAREA", "INPUT"].includes((document.activeElement || {}).tagName);
-  if (slug !== ctx.curSlug) { ctx.curSlug = slug; if (ctx.route === "workspace" && !typing) render(); }
+  if (slug !== ctx.curSlug) { ctx.curSlug = slug; syncCover(); if (ctx.route === "workspace" && !typing) render(); }
   const a = await api.authStatus();
   if (a.signedIn !== ctx.authed.signedIn) { ctx.authed = a; if (!typing) render(); }
 });
-api.onAccepted((slug) => {
-  const p = P.planned().find((x) => x.slug === slug);
-  if (!p || P.isDone(slug) || ctx.route !== "workspace") return;
-  const saw = ctx.attempt && ctx.attempt.slug === slug && ctx.attempt.sawAt;
-  ctx.accepted = { slug, suggest: saw ? "h" : "a", mins: ctx.attempt && ctx.attempt.slug === slug ? attemptMins() : 0 };
-  render();
-});
+function onAccepted(slug) {
+  const redo = P.redoDue().some(p => p.slug === slug);
+  const p = P.planned().find(x => x.slug === slug) || P.redoDue().find(x => x.slug === slug);
+  if (!p || (P.isDone(slug) && !redo) || ctx.route !== "workspace") return;
+  const own = ctx.attempt?.slug === slug ? ctx.attempt : null;
+  const elig = R.eligibility(buildRecord(own, "a", { accepted: true, manual: false }));
+  ctx.accepted = { slug, suggest: elig.alone ? "a" : "h", mins: own ? attemptMins() : 0, elig, why: "", insight: "" }; render();
+}
+api.onAccepted(onAccepted);
 api.onBlocked((u) => { let h = u; try { h = new URL(u).hostname; } catch {} flash(`Blocked ${h} during your focus block.`); });
 api.onShortcut((a) => {
   if (ctx.route !== "workspace") return;
@@ -417,6 +471,7 @@ document.getElementById("topnav")?.addEventListener("click", (e) => {
   if (store.S.profile.onboarded && store.S.profile.dataVersion === 2) {
     // Started from the Hub's DSA session: open the first unsolved problem (leftovers first, then today's).
     if (location.hash === "#next") { const p = P.nextUnsolved(""); if (p) { ctx.curSlug = p.slug; beginAttempt(p.slug); api.open(p.slug); } }
+    ctx.attempt = null; beginAttempt(ctx.curSlug);
     go("workspace");
   }
   else { ctx.draft = Onb.newDraft(); ctx.step = ctx.authed.signedIn ? 2 : 1; go("onboarding"); }
