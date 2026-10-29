@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:">
+<title>DSA Practice</title>
+<link rel="stylesheet" href="styles/app.css">
+</head>
+<body>
+<header id="topnav" class="topnav">
+  <img class="tn-logo" src="../hub/icon.png" alt="">
+  <nav class="tn-tabs" aria-label="Main">
+    <button data-hub="today">Today</button><button data-hub="roadmap">Roadmap</button><button data-hub="subjects">Subjects</button><button class="on" aria-current="page">Practice</button><button data-hub="progress">Progress</button>
+  </nav>
+  <span class="tn-grow"></span>
+  <button class="tn-icon" data-hub="settings" aria-label="Settings" title="Settings"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg></button>
+</header>
+<div class="bgsilk" aria-hidden="true"></div>
+<main id="app"></main>
+<div id="drag" title="Drag to resize. Double-click to reset."></div>
+<script type="module" src="app.js"></script>
+</body>
+</html>
