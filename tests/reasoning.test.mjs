@@ -50,7 +50,7 @@ test("checkThink: lists what's missing, warns on slow complexity, judges the pat
   assert.match(slowCheck.warning, /too slow/);
   assert.equal(slowCheck.patternRight, true);
   const good = { ...slow, complexity: "O(n)" };
-  assert.deepEqual(R.checkThink(good, facts), { problems: [], patternRight: true, warning: "" });
+  assert.deepEqual(R.checkThink(good, facts), { problems: [], patternRight: true, warning: "", unverifiable: false });
   assert.equal(R.checkThink({ ...good, pattern: P("Graphs") }, facts).patternRight, false);
   assert.equal(R.checkThink(good, null).patternRight, null);
 });
@@ -100,6 +100,20 @@ test("eligibility requires one positively verified pattern choice", () => {
 
 test("unknown or malformed constraint sizes do not crash or return a budget", () => {
   for (const n of [-1, NaN, Infinity, "100"]) assert.equal(R.budgetFor(n), null);
+});
+
+test("an unknown custom problem is unverifiable and cannot count as solved alone", () => {
+  const facts = { n: null, lines: [], tags: [], accepted: [], live: false, unverifiable: true };
+  const think = { complexity: "O(n)", brute: "try every pair of values", waste: "repeats the same scan", pattern: 0, patternTries: 0, skipped: false };
+  const check = R.checkThink(think, facts);
+  assert.equal(check.unverifiable, true);
+  assert.equal(check.patternRight, null);
+  assert.equal(check.problems.length, 0);
+  const rec = { think: { ...think, unverifiable: true, patternTries: 1, patternCorrect: false }, accepted: true, manual: false, sawSolution: false, explain: { insight: "use a hash map" } };
+  assert.equal(R.eligibility(rec).alone, false);
+  assert.match(R.eligibility(rec).reasons[0], /can't be checked/);
+  const known = { ...rec, think: { patternTries: 1, patternCorrect: true, skipped: false } };
+  assert.equal(R.eligibility(known).alone, true);
 });
 
 test("a manual mark cannot replace a verified alone solve, and the gate blocks it", () => {

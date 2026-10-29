@@ -98,6 +98,7 @@ function thinkPanel(ctx) {
     <span class="eyebrow">Think first</span>
     <h2>${esc(prob.title)}</h2>
     <p class="muted">The editor opens once you've reasoned it out.</p>
+    ${f && f.unverifiable ? `<p class="think-warn" role="status">This problem isn't in the checked set. You can still do Think-first, but it can't count as solved alone.</p>` : ""}
     <label><b>1. Constraints and target</b><small>${esc(budget)}</small>${sel("complexity", R.COMPLEXITIES.map((c) => [c, c]), t.complexity, "Time complexity you're aiming for")}</label>
     <label><b>2. Brute force</b><small>The simplest thing that works, and its cost.</small><textarea data-think="brute" rows="2">${esc(t.brute)}</textarea></label>
     <label><b>3. What it wastes</b><small>The work it repeats or throws away.</small><textarea data-think="waste" rows="2">${esc(t.waste)}</textarea></label>
@@ -243,7 +244,8 @@ function tabSettings(ctx) {
     </ul>
     <p class="muted">Drag the sidebar's right edge to resize. Double-click it to reset.</p>
     <h3 class="sub">Data</h3>
-    <p class="muted">Company tags: LeetCode, as of ${DATA_DATE}. Your plan: ${store.S.profile.perPattern || "-"} problems per pattern${store.S.profile.premium ? ", Premium included" : ""}.</p>
+    <p class="muted">Company tags: LeetCode, as of ${DATA_DATE}. The list is not updated from the network. Your plan: ${store.S.profile.perPattern || "-"} problems per pattern${store.S.profile.premium ? ", Premium included" : ""}.</p>
+    <p class="muted">The editor cover is only a reminder. It does not prove you solved a problem alone.</p>
     <h3 class="sub">Plan</h3>
     <div class="setbtns">
       <button class="btn sm" data-act="change-plan">Edit companies & patterns</button>

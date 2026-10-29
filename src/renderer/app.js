@@ -3,6 +3,7 @@ import { store, freshProfile } from "./core/state.js";
 import * as R from "./core/reasoning.js";
 import * as A from "./core/attempts.js";
 import * as P from "./core/practice.js";
+import { syncPracticePlan } from "./core/hub-sync.js";
 import * as T from "./core/timer.js";
 import * as Onb from "./screens/onboarding.js";
 import * as Ws from "./screens/workspace.js";
@@ -90,22 +91,14 @@ function commitPlan(d) {
   store.saveNow();
   return true;
 }
-// Plan changes made here (companies, hours, days) flow back to the Hub, so both sides plan from the same numbers.
-const HUB_COMPANIES = ["google", "amazon", "microsoft", "meta", "flipkart", "uber", "servicenow"];
+// The practice plan is noted on the Hub. The Hub goal (company, dates, problems a day) stays as the user set it.
 async function syncHub() {
   const hub = await api.hubLoad();
-  if (!hub || !hub.goal) return;
-  const p = store.S.profile;
-  const ppd = Math.max(1, Math.round((p.hoursPerDay * 60) / 39));         // 39 min: the average problem at this app's mix
-  hub.goal.problemsPerDay = ppd;
-  hub.goal.daysPerWeek = +p.daysPerWeek || hub.goal.daysPerWeek;
-  if ((p.sources || []).length === 1 && HUB_COMPANIES.includes(p.sources[0])) hub.goal.company = p.sources[0];
-  const id = "practice:" + [(p.sources || []).join(","), p.hoursPerDay, p.daysPerWeek, p.queue.length, Date.now()].join("|");
-  hub.dsaSetup = { ...(hub.dsaSetup || {}), id, problemsPerDay: ppd, sources: p.sources, hoursPerDay: p.hoursPerDay, daysPerWeek: p.daysPerWeek };
-  p.problemsPerDay = ppd;                                                  // days hold this many problems, same as the Hub's number
-  p.hubSetupId = id;                                                       // already applied here: don't re-apply it
+  const synced = syncPracticePlan(hub, store.S.profile);
+  if (!synced.changed) return;
+  store.S.profile = synced.profile;
   store.saveNow();
-  await api.hubSave(hub);
+  await api.hubSave(synced.hub);
 }
 function finishOnboarding() {
   if (!commitPlan(ctx.draft)) return;
@@ -226,7 +219,8 @@ async function loadFacts(attempt) {
   try { meta = await api.problemMeta(attempt.slug); } catch {}
   if (ctx.attempt !== attempt) return;
   const c = R.parseConstraints(meta?.content || "");
-  attempt.facts = { n: c.n, lines: c.lines, tags: meta?.tags || [], accepted: R.acceptedPatterns(primary, meta?.tags || []), live: !!meta };
+  const known = Number.isInteger(primary) && primary >= 0 && primary < PATTERNS.length;
+  attempt.facts = { n: c.n, lines: c.lines, tags: meta?.tags || [], accepted: R.acceptedPatterns(known ? primary : -1, meta?.tags || []), live: !!meta, unverifiable: !known };
   if (document.activeElement?.dataset?.think) return; // do not erase text while typing
   render();
 }
@@ -322,9 +316,10 @@ const actions = {
     render(); },
   "think-unlock": () => { const a = ctx.attempt; if (!a || !gating()) return;
     if (!a.facts) { a.nudge = "Checking problem details. You can also skip this step."; render(); return; }
-    const { problems, patternRight, warning } = R.checkThink(a.think, a.facts);
+    const { problems, patternRight, warning, unverifiable } = R.checkThink(a.think, a.facts);
     if (problems.length) { a.nudge = problems[0]; render(); return; }
     a.think.complexityWarning = warning || "";
+    if (unverifiable) { a.think.unverifiable = true; a.think.patternTries = 1; a.think.patternCorrect = false; unlock(); return; }
     a.think.patternTries++; a.think.patternCorrect = patternRight === true;
     if (patternRight === false && a.think.patternTries < 2) { a.nudge = "That pattern may not fit. Re-read the constraints and your brute force."; render(); return; }
     if (patternRight !== true) a.think.patternUnconfirmed = true;
@@ -339,10 +334,12 @@ const actions = {
     const own = attemptFor(a.slug);
     const elig = R.eligibility(buildRecord(own, st, { accepted: true, manual: false, explain: { why: a.why.trim(), insight: a.insight.trim() } }, a.slug));
     if (st === "a" && !elig.alone) { flash(elig.reasons[0] || "This one counts as needed help."); return; }
+    const wasDue = !!(store.S.progress.redo?.[a.slug] && store.S.progress.redo[a.slug].due <= todayKey());
     if (!commitAttempt(a.slug, buildRecord(own, st, { accepted: true, manual: false, explain: { why: a.why.trim(), insight: a.insight.trim() } }, a.slug))) return;
     P.acceptResult(a.slug, st);
+    const remains = !!store.S.progress.redo?.[a.slug];
     reopen(a.slug);
-    ctx.accepted = null; flash(st === "a" ? "Marked as solved alone. Your insight is saved for the redo." : "Marked as needed help. It comes back for a redo."); },
+    ctx.accepted = null; flash(P.acceptToast(st, wasDue, remains)); },
   "accept-dismiss": () => { ctx.accepted = null; render(); },
   redo: (el) => { const slug = el.dataset.slug;
     const block = R.manualMarkBlock(store.S.progress, slug, gating() && slug === ctx.curSlug);
@@ -478,7 +475,7 @@ setInterval(() => {
   if (ev) {
     T.beep();
     const msg = { break: "Focus block done. Take your break.", "long-break": "4 blocks done. Take a long 20 minute break.", work: "Break over. Start the next block." }[ev];
-    try { new Notification("DSA Practice", { body: msg }); } catch {}
+    try { const n = new Notification("DSA Practice", { body: msg }); n.onclick = () => api.focusWindow?.(); } catch {}
     syncFocus(); render(); return;
   }
   const c = document.getElementById("clock");
@@ -555,4 +552,4 @@ window.__flushSaves = () => store.saveNow();
   else { ctx.draft = Onb.newDraft(); ctx.step = ctx.authed.signedIn ? 2 : 1; go("onboarding"); }
 })();
 
-window.__dsa = { ctx, store, render };   // handy for debugging in DevTools
+if (window.dsaDev) window.__dsa = { ctx, store, render };   // dev and tests only; packaged builds leave this unset

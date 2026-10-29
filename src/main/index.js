@@ -1,7 +1,12 @@
 // App entry: one window, one instance.
 const { app } = require("electron");
+const { migrateUserData } = require("./user-data");
 const { AppWindow } = require("./window");
 const { registerIpc } = require("./ipc");
+
+const userData = migrateUserData(app.getPath("appData"));
+app.setPath("userData", userData);
+if (process.platform === "win32") app.setAppUserModelId("local.dsapractice");
 
 let appWin = null;
 

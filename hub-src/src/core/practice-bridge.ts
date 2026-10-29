@@ -4,6 +4,7 @@ import { PROBLEMS, PATTERNS } from "../../../src/renderer/data/dataset.js";
 import { schedule } from "../../../src/renderer/core/plan.js";
 import { BY_SLUG } from "../../../src/renderer/core/problems.js";
 import { isVerifiedAlone, latestAttempt } from "../../../src/renderer/core/reasoning.js";
+import { todayKey, parse, addDays, fmt } from "../../../src/renderer/core/dates.js";
 
 export interface DsaPattern { name: string; alone: number; help: number; planned: number; verified: number }
 export interface DsaSummary {
@@ -54,7 +55,17 @@ export function summarizeDsa(raw: any, today: string): DsaSummary {
       todayPatterns: [...new Set<string>(todays.map((p: any) => p.pattern))], todayTitles: todays.map((p: any) => p.title),
       nextSlug: (left[0] || todayLeft[0] || null)?.slug || null };
   }
-  return { hasPlan: !!prof.onboarded, source: names, patterns, soloToday, doneToday, streakDays: 0, activeDays, ...day };
+  return { hasPlan: !!prof.onboarded, source: names, patterns, soloToday, doneToday, streakDays: streakOfDays(activeDays), activeDays, ...day };
+}
+
+function streakOfDays(days: string[], now = new Date()): number {
+  const set = new Set(days);
+  const shift = (key: string, n: number) => fmt(addDays(parse(key), n));
+  let key = todayKey(now);
+  if (!set.has(key)) key = shift(key, -1);
+  let n = 0;
+  while (set.has(key) && n < 10000) { n++; key = shift(key, -1); }
+  return n;
 }
 
 /** Recorded Think-first solves count fully, other alone marks half, and help a quarter. */

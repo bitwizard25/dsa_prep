@@ -1,9 +1,20 @@
-// Safe bridge: the UI can only call these functions.
+// Safe bridge. Each page of the main window only receives the calls it uses.
 const { contextBridge, ipcRenderer } = require("electron");
+
 const inv = (ch) => (arg) => ipcRenderer.invoke(ch, arg);
 const on = (ch) => (cb) => ipcRenderer.on(ch, (_e, data) => cb(data));
 
-contextBridge.exposeInMainWorld("api", {
+const HUB_KEYS = ["hubLoad", "hubSave", "loadState", "openPractice", "setReminders", "setTray", "onReminder", "onHubFocus", "onHubRoute", "onRemindersRefresh"];
+const PRACTICE_KEYS = ["loadState", "saveState", "layout", "drag", "open", "home", "back", "url", "problemMeta", "cover", "setFocus", "authStatus", "loginBrowser", "loginContinue", "logout", "onUrl", "onBlocked", "onShortcut", "onAuthProgress", "onNeedLogin", "hubLoad", "hubSave", "openHub", "onAccepted", "focusWindow"];
+
+function keysFor(href) {
+  const s = String(href || "");
+  if (s.includes("/hub/index.html")) return HUB_KEYS.slice();
+  if (s.includes("/renderer/index.html")) return PRACTICE_KEYS.slice();
+  return [];
+}
+
+const ALL = {
   loadState: inv("state:load"),
   saveState: inv("state:save"),
   layout: inv("ui:layout"),
@@ -24,7 +35,6 @@ contextBridge.exposeInMainWorld("api", {
   onShortcut: on("shortcut"),
   onAuthProgress: on("auth-progress"),
   onNeedLogin: on("need-login"),
-  // Hub (added)
   hubLoad: inv("hub:load"),
   hubSave: inv("hub:save"),
   openHub: (route) => ipcRenderer.invoke("view:open", { view: "hub", route }),
@@ -34,5 +44,16 @@ contextBridge.exposeInMainWorld("api", {
   onReminder: on("hub-reminder"),
   onHubFocus: on("hub-focus"),
   onHubRoute: on("hub-route"),
+  onRemindersRefresh: on("reminders-refresh"),
   onAccepted: on("accepted"),
-});
+  focusWindow: inv("window:focus"),
+};
+
+const href = typeof location === "undefined" ? "" : location.href;
+const api = {};
+for (const key of keysFor(href)) api[key] = ALL[key];
+contextBridge.exposeInMainWorld("api", api);
+const dev = typeof process !== "undefined" && Array.isArray(process.argv) && process.argv.includes("--dsa-dev");
+contextBridge.exposeInMainWorld("dsaDev", dev);
+
+if (typeof module !== "undefined" && module.exports) module.exports = { keysFor, HUB_KEYS, PRACTICE_KEYS };

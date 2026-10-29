@@ -30,13 +30,19 @@ class AppWindow {
     this.win = new BrowserWindow({
       ...b, minWidth: 1000, minHeight: 640, title: "DSA Practice", backgroundColor: "#0D0D0D", show: false,
       icon: path.join(__dirname, "assets", "icon-256.png"),
-      webPreferences: { preload: path.join(__dirname, "..", "preload", "index.js"), contextIsolation: true, nodeIntegration: false, sandbox: true },
+      webPreferences: {
+        preload: path.join(__dirname, "..", "preload", "index.js"), contextIsolation: true, nodeIntegration: false, sandbox: true,
+        additionalArguments: app.isPackaged ? [] : ["--dsa-dev"],
+      },
     });
     if (this.prefs.maximized) this.win.maximize();
     this.win.once("ready-to-show", () => this.win.show());
     this.win.webContents.on("did-finish-load", () => { this.hubLoaded = this.view === "hub"; });
-    // Links in the Hub (videos, playlists) open in the normal browser, never inside the app.
-    this.win.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:\/\//.test(url)) shell.openExternal(url); return { action: "deny" }; });
+    // The main window only loads the two app pages. Other navigations stay out; web links open outside.
+    const guardNav = (e, url) => { if (!allowAppNavigation(url)) e.preventDefault(); };
+    this.win.webContents.on("will-navigate", guardNav);
+    this.win.webContents.on("will-redirect", guardNav);
+    this.win.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:\/\//i.test(url)) shell.openExternal(url); return { action: "deny" }; });
 
     this.lc = new LeetCodeView({
       send: (ch, data) => this.send(ch, data),
@@ -134,4 +140,14 @@ class AppWindow {
   focusExisting() { if (this.win.isMinimized()) this.win.restore(); this.win.show(); this.win.focus(); }
 }
 
-module.exports = { AppWindow };
+/** file:// URLs for the Hub and practice pages only. */
+function allowAppNavigation(url) {
+  try {
+    const u = new URL(url);
+    if (u.protocol !== "file:") return false;
+    const p = decodeURIComponent(u.pathname).replace(/\\/g, "/");
+    return p.endsWith("/hub/index.html") || p.endsWith("/renderer/index.html");
+  } catch { return false; }
+}
+
+module.exports = { AppWindow, allowAppNavigation };

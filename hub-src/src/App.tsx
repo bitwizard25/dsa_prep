@@ -20,6 +20,7 @@ export function App() {
   const [route, setRoute] = useState<{ name: string; arg?: any }>({ name: START });
   const [planMode, setPlanMode] = useState(false);
   const [dsa, setDsa] = useState<DsaSummary | undefined>();
+  const [reminderTick, setReminderTick] = useState(0);
   const plan = useMemo(() => (hub.goal ? buildPlan(hub.goal) : null), [hub.goal]);
   const go = (name: string, arg?: any) => {
     if (name === "practice") {
@@ -32,7 +33,7 @@ export function App() {
 
   // DSA progress comes from the practice app's own data; refresh whenever the Hub comes back into view.
   const refreshDsa = () => api.loadState().then((raw) => { const d = summarizeDsa(raw, todayKey()); setDsaTruth(d); setDsa(d); });
-  useEffect(() => { refreshDsa(); api.onHubFocus(refreshDsa); api.onHubRoute((r) => { setPlanMode(false); go(r); }); }, []);
+  useEffect(() => { refreshDsa(); api.onHubFocus(refreshDsa); api.onHubRoute((r) => { setPlanMode(false); go(r); }); api.onRemindersRefresh?.(() => setReminderTick((n) => n + 1)); }, []);
 
   // Reminders: hand today's remaining sessions to the main process, which shows system notifications.
   useEffect(() => {
@@ -45,7 +46,7 @@ export function App() {
       next: arr[k + 1] ? `${SUBJECT[arr[k + 1].subject].short} at ${clock(arr[k + 1].startMin)}` : null,
     }));
     api.setReminders(list);
-  }, [plan, hub.progress.sessions, hub.settings.reminders, dsa]);
+  }, [plan, hub.progress.sessions, hub.settings.reminders, dsa, reminderTick]);
 
   // In-app copy of each reminder, with a Start button when it's a session start.
   useEffect(() => api.onReminder((r) => {

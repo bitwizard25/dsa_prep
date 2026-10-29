@@ -105,14 +105,16 @@ export function checkThink(think, facts) {
   if (COMPLEXITIES.includes(think.complexity) && fitsBudget(think.complexity, n) === "too-slow") {
     warning = `With n up to ${fmtN(n)}, ${think.complexity} may be too slow. Consider ${budgetFor(n)} or better.`;
   }
-  const patternRight = !facts || think.pattern === null || think.pattern === undefined ? null : facts.accepted.includes(think.pattern);
-  return { problems, patternRight, warning };
+  const unverifiable = !!(facts && facts.unverifiable);
+  const patternRight = !facts || unverifiable || think.pattern === null || think.pattern === undefined ? null : facts.accepted.includes(think.pattern);
+  return { problems, patternRight, warning, unverifiable };
 }
 
 /** "Solved alone" is earned, not clicked: every condition must hold. */
 export function eligibility(rec) {
   const reasons = [];
   if (!rec.think || rec.think.skipped) reasons.push("Think-first was skipped");
+  else if (rec.think.unverifiable) reasons.push("This problem's pattern can't be checked, so it can't count as solved alone");
   // patternTries 0 is not a confirmed choice. An unconfirmed pattern never counts, even if the other fields look right.
   else if (rec.think.patternTries !== 1 || rec.think.patternCorrect !== true || rec.think.patternUnconfirmed) reasons.push("The pattern was not confirmed on the first try");
   if (rec.sawSolution) reasons.push("You opened the solution");

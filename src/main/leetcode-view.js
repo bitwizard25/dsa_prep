@@ -66,7 +66,7 @@ const coverScript = (on) => `(() => {
   if (!cover) {
     cover = document.createElement("div"); cover.id = "__dsaCover"; cover.setAttribute("role", "note");
     cover.style.cssText = "position:fixed;top:0;right:0;bottom:0;width:55%;z-index:2147483647;display:flex;align-items:center;justify-content:center;padding:32px;text-align:center;background:rgba(21,26,33,.94);color:#E4E8EE;font:600 16px/1.5 system-ui,sans-serif;box-sizing:border-box";
-    cover.textContent = "Think first. Answer the questions in the sidebar, then the editor opens.";
+    cover.textContent = "Think first. This cover is only a reminder, not proof. Answer the questions in the sidebar, then the editor opens.";
     document.documentElement.appendChild(cover);
   }
   if (!window.__dsaKeyGuard) {

@@ -1,4 +1,4 @@
-// Offline Think-first review checks. Run: npx electron test/e2e/think-review.cjs
+// Offline Think-first review checks. Run: npx electron tests/e2e/think-review.cjs
 const { app, BrowserWindow } = require("electron");
 const fs = require("fs");
 const os = require("os");
@@ -18,7 +18,7 @@ app.whenReady().then(async () => {
   const { registerIpc } = require(path.join(root, "src/main/ipc.js"));
   const win = new BrowserWindow({
     show: false,
-    webPreferences: { preload: path.join(root, "src/preload/index.js"), contextIsolation: true, nodeIntegration: false, sandbox: true },
+    webPreferences: { preload: path.join(root, "src/preload/index.js"), contextIsolation: true, nodeIntegration: false, sandbox: true, additionalArguments: ["--dsa-dev"] },
   });
   let url = "";
   const lc = {

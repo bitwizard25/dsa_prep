@@ -7,7 +7,8 @@ class TrayControl {
   set(on) {
     this.appWin.keepInTray = !!on;
     if (on && !this.tray) {
-      this.tray = new Tray(nativeImage.createFromPath(path.join(__dirname, "assets", "icon-32.png")));
+      const iconFile = process.platform === "win32" ? "icon.ico" : "icon-32.png";
+      this.tray = new Tray(nativeImage.createFromPath(path.join(__dirname, "assets", iconFile)));
       this.tray.setToolTip("DSA Practice");
       this.tray.setContextMenu(Menu.buildFromTemplate([
         { label: "Open Hub", click: () => { this.appWin.focusExisting(); this.appWin.openView("hub"); } },

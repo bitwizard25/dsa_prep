@@ -22,6 +22,13 @@ const nextStudyDay = (date, dpw) => {
  * Pack the queue into days. Each day holds as many problems as fit in hoursPerDay.
  * A day always gets at least one problem, even if it is longer than the budget.
  */
+/** Everything schedule() reads: settings, start date, and each problem's identity and difficulty. */
+export function scheduleCacheKey(profile, queue) {
+  const p = profile || {};
+  const items = (queue || []).map((x) => `${x.slug || x.n || ""}:${x.d || ""}`).join(",");
+  return [p.hoursPerDay, p.daysPerWeek, p.startDate, p.problemsPerDay || 0, items].join("|");
+}
+
 export function schedule(queue, { hoursPerDay, daysPerWeek, startDate, problemsPerDay }) {
   if (problemsPerDay != null && problemsPerDay !== 0 && (!Number.isSafeInteger(problemsPerDay) || problemsPerDay < 1)) {
     throw new RangeError("problemsPerDay must be a positive integer, or zero for time-based scheduling");

@@ -2,7 +2,7 @@
 import * as R from "./reasoning.js";
 import { store } from "./state.js";
 import { BY_SLUG } from "./problems.js";
-import { schedule } from "./plan.js";
+import { schedule, scheduleCacheKey } from "./plan.js";
 import { parse, fmt, addDays, diffDays, todayKey } from "./dates.js";
 
 const S = () => store.S;
@@ -16,8 +16,9 @@ export function queue() {
 
 export function days() {
   const p = S().profile;
-  const key = [p.queue.length, p.queue[0], p.queue[p.queue.length - 1], p.hoursPerDay, p.daysPerWeek, p.startDate, p.problemsPerDay || 0].join("|");
-  if (cache.key !== key) cache = { key, days: schedule(queue(), p) };
+  const q = queue();
+  const key = scheduleCacheKey(p, q);
+  if (cache.key !== key) cache = { key, days: schedule(q, p) };
   return cache.days;
 }
 
@@ -59,17 +60,24 @@ export function nextUnsolved(currentSlug) {
 // A problem solved with help comes back from a blank editor after 3, 10 and 30 days.
 const REDO_GAPS = [3, 10, 30];
 const redos = () => S().progress.redo || (S().progress.redo = {});
-const dueIn = (days) => fmt(addDays(new Date(), days));
+const dueIn = (days) => fmt(addDays(parse(todayKey()), days));
+function stageOf(r) {
+  const n = Number(r && r.stage);
+  return Number.isInteger(n) && n >= 0 ? Math.min(n, REDO_GAPS.length - 1) : 0;
+}
 
 function apply(slug, st) {
   const pr = S().progress;
   pr.status[slug] = st; pr.when[slug] = todayKey();
-  if (st === "h") redos()[slug] = { due: dueIn(REDO_GAPS[0]), stage: 0 };
-  else delete redos()[slug];
+  if (st === "h") {
+    const prev = redos()[slug];
+    if (!prev) redos()[slug] = { due: dueIn(REDO_GAPS[0]), stage: 0 };
+    else prev.stage = stageOf(prev);
+  } else delete redos()[slug];
 }
 export function mark(slug, st) {
   const pr = S().progress;
-  if (pr.status[slug] === st) { delete pr.status[slug]; delete pr.when[slug]; delete redos()[slug]; }
+  if (pr.status[slug] === st) { delete pr.status[slug]; delete pr.when[slug]; }
   else apply(slug, st);
   store.save();
 }
@@ -79,11 +87,20 @@ export function setMark(slug, st) { apply(slug, st); store.save(); }
 export function redoResult(slug, ok) {
   const r = redos()[slug];
   if (!r) return;
+  const stage = stageOf(r);
   if (ok) {
-    if (r.stage >= REDO_GAPS.length - 1) delete redos()[slug];
-    else { r.stage++; r.due = dueIn(REDO_GAPS[r.stage]); }
+    if (stage >= REDO_GAPS.length - 1) delete redos()[slug];
+    else { r.stage = stage + 1; r.due = dueIn(REDO_GAPS[stage + 1]); }
   } else { r.stage = 0; r.due = dueIn(REDO_GAPS[0]); }
   store.save();
+}
+
+/** Toast after the Accepted card, matching what the redo schedule actually did. */
+export function acceptToast(st, wasDue, redoRemains) {
+  if (st === "a" && wasDue && redoRemains) return "Marked as solved alone. The next redo is further out.";
+  if (st === "a" && wasDue) return "Marked as solved alone. That was the last redo.";
+  if (st === "a") return "Marked as solved alone.";
+  return "Marked as needed help. It comes back in 3 days.";
 }
 
 /**
@@ -131,16 +148,17 @@ export const doneOn = (k) => Object.values(S().progress.when).filter((v) => v ==
 let hubDays = new Set();
 export const setHubDays = (days) => { hubDays = new Set(days || []); };
 const active = (k) => doneOn(k) > 0 || ((S().log[k] || {}).pomos || 0) > 0 || hubDays.has(k);
+const dayShift = (key, n) => fmt(addDays(parse(key), n));
 export function streak() {
-  let d = new Date();
-  if (!active(fmt(d))) d = addDays(d, -1);
+  let key = todayKey();
+  if (!active(key)) key = dayShift(key, -1);
   let c = 0;
-  while (active(fmt(d))) { c++; d = addDays(d, -1); }
+  while (active(key) && c < 10000) { c++; key = dayShift(key, -1); }
   return c;
 }
 export const missedYesterday = () => {
   const any = Object.keys(S().progress.when).length > 0 || Object.keys(S().log).some(active);
-  return any && !active(fmt(addDays(new Date(), -1))) && !active(todayKey());
+  return any && !active(dayShift(todayKey(), -1)) && !active(todayKey());
 };
 export function energy() {
   const e = dayLog().energy;

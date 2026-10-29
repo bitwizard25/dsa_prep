@@ -16,6 +16,18 @@ function read(name) {
   return null;
 }
 
+function retryRename(rename, from, to, attempt = 0) {
+  try { rename(from, to); }
+  catch (e) {
+    if ((e.code !== "EPERM" && e.code !== "EBUSY") || attempt >= 4) throw e;
+    const wait = [15, 40, 80, 160][attempt];
+    const end = Date.now() + wait;
+    while (Date.now() < end) {}
+    retryRename(rename, from, to, attempt + 1);
+  }
+}
+function renameWithRetry(from, to) { retryRename(fs.renameSync, from, to); }
+
 function write(name, data) {
   const f = file(name), tmp = f + ".tmp";
   const json = JSON.stringify(data);
@@ -28,10 +40,10 @@ function write(name, data) {
     catch { previous = undefined; }
     if (previous !== undefined) {
       fs.writeFileSync(f + ".bak.tmp", previous, { mode: 0o600, flush: true });
-      fs.renameSync(f + ".bak.tmp", f + ".bak");
+      renameWithRetry(f + ".bak.tmp", f + ".bak");
     }
     fs.writeFileSync(tmp, json, { mode: 0o600, flush: true });
-    fs.renameSync(tmp, f);
+    renameWithRetry(tmp, f);
   } finally {
     for (const pending of [tmp, f + ".bak.tmp"]) {
       try { fs.unlinkSync(pending); } catch {}
@@ -39,4 +51,4 @@ function write(name, data) {
   }
 }
 
-module.exports = { read, write, file };
+module.exports = { read, write, file, renameWithRetry, retryRename };
