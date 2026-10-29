@@ -66,12 +66,14 @@ function note(ctx) {
       <button class="ghost sm" data-act="login-continue">I logged in and closed it</button></div>`;
   if (ctx.accepted) {
     const a = ctx.accepted, p = P.planned().find((x) => x.slug === a.slug) || P.problemOf(a.slug) || { title: a.slug };
+    const blocked = a.blocked || [];
     return `<div class="note accepted"><b>Accepted: ${esc(p.title)}${a.mins ? ` in ${a.mins} min` : ""}</b>
+      ${ctx.flash ? `<p class="think-nudge" role="status">${esc(ctx.flash)}</p>` : ""}
       <label class="ex"><span>Why does it work? <small>(optional)</small></span><textarea id="exWhy" rows="2">${esc(a.why)}</textarea></label>
       <label class="ex"><span>Key insight <small>(you'll see this on the redo)</small></span><textarea id="exInsight" rows="2">${esc(a.insight)}</textarea></label>
-      ${a.elig.alone ? "" : `<p class="muted">Counts as Help: ${esc(a.elig.reasons.join(", ").toLowerCase())}.</p>`}
-      <div class="row"><button class="btn ${a.elig.alone ? "primary" : ""} sm" data-act="accept-mark" data-st="a" ${a.elig.alone ? "" : "disabled"}>Solved alone</button>
-      <button class="btn ${a.elig.alone ? "" : "primary"} sm" data-act="accept-mark" data-st="h">Needed help</button>
+      ${blocked.length ? `<p class="think-nudge" role="status">Counts as Help: ${esc(blocked.join(", ").toLowerCase())}.</p>` : ""}
+      <div class="row"><button class="btn ${blocked.length ? "" : "primary"} sm" data-act="accept-mark" data-st="a" ${blocked.length ? "disabled" : ""}>Solved alone</button>
+      <button class="btn ${blocked.length ? "primary" : ""} sm" data-act="accept-mark" data-st="h">Needed help</button>
       <button class="textbtn" data-act="accept-dismiss">Not now</button></div></div>`;
   }
 

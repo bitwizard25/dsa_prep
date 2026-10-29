@@ -24,17 +24,48 @@ export function markSolutionSeen(seen, slug, at) {
   return true;
 }
 
+const blankThink = () => ({ complexity: "", brute: "", waste: "", pattern: null, patternTries: 0, patternCorrect: false, patternUnconfirmed: false, skipped: false, complexityWarning: "" });
+
+/** Serializable copy of the current try: pattern evidence, solution flag, and explain-back. */
+export function draftFrom(attempt, explain) {
+  if (!attempt?.slug || attempt.recorded) return null;
+  const think = { ...blankThink(), ...(attempt.think || {}) };
+  const note = explain || attempt.explain || null;
+  return {
+    start: attempt.start, sawAt: attempt.sawAt || null, gate: !!attempt.gate, unlocked: !!attempt.unlocked, unlockedAt: attempt.unlockedAt || null,
+    think, explain: note ? { why: note.why || "", insight: note.insight || "" } : null,
+  };
+}
+
+/** Rebuild an in-progress try from disk. A problem that no longer needs the gate is not locked again. */
+export function hydrateAttempt(slug, draft, gateNow, seenAt) {
+  const think = { ...blankThink(), ...(draft?.think || {}) };
+  const attempt = {
+    slug, start: draft?.start || Date.now(), sawAt: draft?.sawAt || seenAt || null,
+    gate: !!gateNow, unlocked: gateNow ? !!draft?.unlocked : true, unlockedAt: draft?.unlockedAt || (gateNow ? null : Date.now()),
+    think, facts: null, nudge: "", explain: draft?.explain || null, recorded: false,
+  };
+  if (seenAt && !attempt.sawAt) attempt.sawAt = seenAt;
+  return attempt;
+}
+
 /**
  * The attempt to show for `slug`.
- * A saved try comes back with its answers and solution flag. If the session map
- * was lost, a saved solution time is copied onto the new try so it cannot look unseen.
+ * Memory wins for this session. Otherwise the saved draft (pattern tries, solution flag,
+ * explain-back) is restored. A bare solution time still marks a new try as seen.
  */
-export function resolveAttempt(memory, seen, slug, fresh) {
+export function resolveAttempt(memory, seen, slug, fresh, disk, gateNow) {
   const seenAt = seen && slug ? seen[slug] || null : null;
   const saved = memory && slug ? memory[slug] : null;
   if (saved && !saved.recorded) {
     if (seenAt && !saved.sawAt) saved.sawAt = seenAt;
+    if (disk?.sawAt && !saved.sawAt) saved.sawAt = disk.sawAt;
     return { attempt: saved, restored: true };
+  }
+  if (disk && slug) {
+    const attempt = hydrateAttempt(slug, disk, gateNow, seenAt);
+    if (memory) memory[slug] = attempt;
+    return { attempt, restored: true };
   }
   const attempt = fresh();
   if (seenAt && !attempt.sawAt) attempt.sawAt = seenAt;

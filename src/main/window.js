@@ -57,16 +57,36 @@ class AppWindow {
     this.win.on("move", remember);
     this.win.on("close", (e) => {
       if (this.keepInTray && !app.isQuitting) { e.preventDefault(); this.win.hide(); return; }
-      remember(); clearTimeout(this.saveT); store.write("window.json", this.prefs); });
+      if (!this.allowClose) {
+        e.preventDefault();
+        this.allowClose = true;
+        this.flushPage().finally(() => {
+          remember(); clearTimeout(this.saveT);
+          try { store.write("window.json", this.prefs); } catch {}
+          if (!this.win.isDestroyed()) this.win.destroy();
+        });
+      }
+    });
 
     this.hookShortcuts(this.win.webContents);
     this.hookShortcuts(this.lc.wc);
   }
 
+  /** Ask the open page to write its debounced save before this page is thrown away. */
+  flushPage() {
+    const wc = this.win && !this.win.isDestroyed() ? this.win.webContents : null;
+    if (!wc || wc.isDestroyed()) return Promise.resolve();
+    return Promise.race([
+      wc.executeJavaScript("Promise.resolve(window.__flushSaves && window.__flushSaves())").catch(() => {}),
+      new Promise((resolve) => setTimeout(resolve, 1500)),
+    ]);
+  }
+
   /** Switch between the Hub and the practice app. The practice app is loaded exactly as before. */
-  openView(view, route) {
+  async openView(view, route) {
     // Already on the Hub: switch screens inside the open page instead of reloading it (no unsaved state is lost).
     if (view !== "practice" && this.view === "hub" && this.hubLoaded) { this.send("hub-route", route || "today"); return "hub"; }
+    await this.flushPage();
     this.hubLoaded = false;
     this.view = view === "practice" ? "practice" : "hub";
     if (this.view === "hub") {

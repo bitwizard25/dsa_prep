@@ -91,7 +91,7 @@ export function PracticeScreen(ctx: Ctx) {
       <p class="eyebrow">DSA practice</p>
       <h2 class="hero-title">{dsa?.hasPlan ? `Your ${dsa.source.split(" + ").map((x) => x[0].toUpperCase() + x.slice(1)).join(" + ")} problem plan` : "Set up your company problem plan"}</h2>
       <p class="hero-meta">{dsa?.hasPlan ? <><b>{dsa.doneToday}</b><span>solved today</span><b>{dsa.soloToday}</b><span>on your own</span></> : <span>LeetCode inside the app, company problem sets, focus timer, spaced redo.</span>}</p>
-      <div class="row"><Button kind="primary" size="lg" onClick={() => api.openPractice()}><Icon.play /> Solve next problem</Button></div>
+      <div class="row"><Button kind="primary" size="lg" onClick={() => ctx.go("practice")}><Icon.play /> Solve next problem</Button></div>
     </div>
     {pats.length > 0 && <Section title="DSA patterns from your practice">
       <ul class="mini-bars wide">{pats.map((p) => { const v = dsaMastery(p) || 0; return <li><span>{p.name}</span><Bar value={v} label={p.name} /><b>{p.alone + p.help}/{p.planned || "-"}</b></li>; })}</ul>

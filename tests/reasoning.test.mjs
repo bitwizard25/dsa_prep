@@ -57,7 +57,7 @@ test("checkThink: lists what's missing, warns on slow complexity, judges the pat
 
 test("eligibility: only fully honest attempts count as alone", () => {
   const base = { at: "2026-10-29", think: { complexity: "O(n)", brute: "x y z", waste: "x y z", pattern: 2, patternTries: 1, patternCorrect: true, skipped: false },
-    n: 1e5, tags: [], sawSolution: false, accepted: true, explain: { why: "a b c", insight: "a b c" }, result: "a", manual: false };
+    n: 1e5, tags: [], sawSolution: false, accepted: true, explain: { why: "use a hash map", insight: "use a hash map" }, result: "a", manual: false };
   assert.deepEqual(R.eligibility(base), { alone: true, reasons: [] });
   assert.equal(R.eligibility({ ...base, think: null }).alone, false);
   assert.equal(R.eligibility({ ...base, think: { ...base.think, skipped: true } }).alone, false);
@@ -65,12 +65,14 @@ test("eligibility: only fully honest attempts count as alone", () => {
   assert.equal(R.eligibility({ ...base, think: { ...base.think, patternTries: 2 } }).alone, false);
   assert.equal(R.eligibility({ ...base, manual: true }).alone, false);
   assert.equal(R.eligibility({ ...base, accepted: false }).alone, false);
+  assert.equal(R.eligibility({ ...base, explain: null }).alone, false);
+  assert.equal(R.eligibility({ ...base, explain: { why: "", insight: "idk" } }).alone, false);
 });
 
 test("attempt storage: newest last, capped, verified-alone reads the latest", () => {
   const progress = { status: { "two-sum": "a" } };
   const rec = (result, ok) => ({ at: "2026-10-29", think: ok ? { complexity: "O(n)", brute: "x y z", waste: "x y z", pattern: 0, patternTries: 1, patternCorrect: true, skipped: false } : null,
-    n: null, tags: [], sawSolution: false, accepted: true, explain: null, result, manual: false });
+    n: null, tags: [], sawSolution: false, accepted: true, explain: ok ? { insight: "use a hash map" } : null, result, manual: false });
   for (let i = 0; i < 7; i++) R.recordAttempt(progress, "two-sum", rec("a", i % 2 === 0), 5);
   assert.equal(progress.attempts["two-sum"].length, 5);
   assert.equal(R.latestAttempt(progress, "two-sum").think !== null, true);
@@ -81,8 +83,9 @@ test("attempt storage: newest last, capped, verified-alone reads the latest", ()
 });
 
 test("eligibility requires one positively verified pattern choice", () => {
-  const base = { think: { patternTries: 1, patternCorrect: true, skipped: false }, accepted: true, manual: false, sawSolution: false };
+  const base = { think: { patternTries: 1, patternCorrect: true, skipped: false }, accepted: true, manual: false, sawSolution: false, explain: { insight: "use a hash map" } };
   assert.equal(R.eligibility(base).alone, true);
+  assert.equal(R.eligibility({ ...base, explain: { insight: "" } }).alone, false);
   for (const think of [
     { patternTries: 0, patternCorrect: true },
     { patternTries: 0, patternCorrect: false },
@@ -97,6 +100,15 @@ test("eligibility requires one positively verified pattern choice", () => {
 
 test("unknown or malformed constraint sizes do not crash or return a budget", () => {
   for (const n of [-1, NaN, Infinity, "100"]) assert.equal(R.budgetFor(n), null);
+});
+
+test("a manual mark cannot replace a verified alone solve, and the gate blocks it", () => {
+  const progress = { status: { "two-sum": "a" }, attempts: { "two-sum": [{ result: "a", manual: false, accepted: true, sawSolution: false, explain: { insight: "use a hash map" }, think: { patternTries: 1, patternCorrect: true, skipped: false } }] } };
+  assert.equal(R.isVerifiedAlone(progress, "two-sum"), true);
+  assert.equal(R.canManualMark(progress, "two-sum"), false);
+  assert.match(R.manualMarkBlock(progress, "two-sum", false), /verified/);
+  assert.match(R.manualMarkBlock(progress, "two-sum", true), /Think-first/);
+  assert.equal(R.manualMarkBlock({ status: {} }, "two-sum", false), "");
 });
 
 test("tag mapping never introduces invalid pattern indexes", () => {

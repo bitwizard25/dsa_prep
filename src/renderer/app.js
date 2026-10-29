@@ -143,7 +143,7 @@ function resetPlanProgress() {
       const pr = store.S.progress;
       for (const p of P.planned()) {
         delete pr.status[p.slug]; delete pr.when[p.slug]; delete (pr.redo || {})[p.slug]; delete (pr.attempts || {})[p.slug];
-        delete (pr.solutionSeen || {})[p.slug]; A.dropAttempt(openAttempts, p.slug);
+        delete (pr.solutionSeen || {})[p.slug]; delete (pr.open || {})[p.slug]; A.dropAttempt(openAttempts, p.slug);
       }
       if (ctx.attempt) { ctx.attempt = null; beginAttempt(ctx.curSlug); }
       const d = Onb.newDraft(); d.skipSolved = false; commitPlan(d);
@@ -178,7 +178,9 @@ function openNext() {
 function markCurrent(st) {
   const known = P.planned().find((p) => p.slug === ctx.curSlug);
   if (!known) { flash("Open a problem from your plan first."); return; }
-  commitAttempt(ctx.curSlug, buildRecord(attemptFor(ctx.curSlug), st, { accepted: false, manual: true }, ctx.curSlug));
+  const block = R.manualMarkBlock(store.S.progress, ctx.curSlug, gating());
+  if (block) { flash(block); return; }
+  if (!commitAttempt(ctx.curSlug, buildRecord(attemptFor(ctx.curSlug), st, { accepted: false, manual: true }, ctx.curSlug))) return;
   P.setMark(ctx.curSlug, st);
   reopen(ctx.curSlug);
   flash(`Marked "${known.title}" as ${st === "a" ? "solved alone" : "needed help"}. Ctrl+Alt+N for the next one.`);
@@ -206,10 +208,11 @@ function beginAttempt(slug) {
   }
   if (ctx.attempt) A.stashAttempt(openAttempts, ctx.attempt);
   const gate = needsGate(slug);
+  const disk = (store.S.progress.open || {})[slug] || null;
   const { attempt } = A.resolveAttempt(openAttempts, seen, slug, () => ({
     slug, start: Date.now(), sawAt: null, gate, unlocked: !gate, unlockedAt: gate ? null : Date.now(),
-    think: { complexity: "", brute: "", waste: "", pattern: null, patternTries: 0, patternCorrect: false, skipped: false }, facts: null, nudge: "",
-  }));
+    think: { complexity: "", brute: "", waste: "", pattern: null, patternTries: 0, patternCorrect: false, patternUnconfirmed: false, skipped: false, complexityWarning: "" }, facts: null, nudge: "", explain: null,
+  }), disk, gate);
   ctx.attempt = attempt;
   const locked = attempt.gate && !attempt.unlocked;
   if (locked && store.S.ui.collapsed) { store.S.ui.collapsed = false; store.save(); applyLayout(); }
@@ -232,6 +235,7 @@ function unlock() {
   syncCover();
   // A break stays a break. Starting focus here would hide the redo insight behind the timer.
   if (!store.S.timer.running && store.S.timer.mode !== "break") T.toggle();
+  persistOpen(true);
   syncFocus(); render();
 }
 function attemptFor(slug) {
@@ -246,10 +250,23 @@ function buildRecord(a, result, { accepted, manual, explain = null }, slug = a?.
 }
 // Writing the attempt down ends that try. The solution flag must not leak into the next one.
 function commitAttempt(slug, rec) {
+  if (rec?.manual && !R.canManualMark(store.S.progress, slug)) return false;
   if (ctx.attempt?.slug === slug) ctx.attempt.recorded = true;
   A.dropAttempt(openAttempts, slug);
   if (store.S.progress.solutionSeen) delete store.S.progress.solutionSeen[slug];
+  if (store.S.progress.open) delete store.S.progress.open[slug];
   P.recordAttempt(slug, rec);
+  return true;
+}
+function persistOpen(immediate = false) {
+  const slug = ctx.attempt?.slug;
+  if (!slug || ctx.attempt.recorded) return;
+  const open = store.S.progress.open || (store.S.progress.open = {});
+  if (ctx.accepted?.slug === slug) ctx.attempt.explain = { why: ctx.accepted.why || "", insight: ctx.accepted.insight || "" };
+  const draft = A.draftFrom(ctx.attempt, ctx.attempt.explain);
+  if (draft) open[slug] = draft; else delete open[slug];
+  if (ctx.attempt.sawAt) solutionSeenMap()[slug] = ctx.attempt.sawAt;
+  if (immediate) store.saveNow(); else store.save();
 }
 // Call after the mark or redo schedule has been updated, so the next try sees the new status.
 function reopen(slug) {
@@ -296,8 +313,10 @@ const actions = {
   // workspace
   open: (el) => { ctx.curSlug = el.dataset.slug; beginAttempt(el.dataset.slug); api.open(el.dataset.slug); render(); },
   mark: (el) => { const slug = el.dataset.slug, st = el.dataset.st;
+    const block = R.manualMarkBlock(store.S.progress, slug, gating() && slug === ctx.curSlug);
+    if (block) { flash(block); return; }
     const recording = P.status(slug) !== st;
-    if (recording) commitAttempt(slug, buildRecord(attemptFor(slug), st, { accepted: false, manual: true }, slug));
+    if (recording && !commitAttempt(slug, buildRecord(attemptFor(slug), st, { accepted: false, manual: true }, slug))) return;
     P.mark(slug, st);
     if (recording) reopen(slug);
     render(); },
@@ -315,15 +334,21 @@ const actions = {
   timer: toggleTimer,
   start: oneTapStart,
   "mark-cur": (el) => { markCurrent(el.dataset.st); },
-  "accept-mark": (el) => { const a = ctx.accepted, st = el.dataset.st; if (!a || (st === "a" && !a.elig.alone)) return;
+  "accept-mark": (el) => { const a = ctx.accepted, st = el.dataset.st; if (!a) return;
     if (!R.wordsOk(a.insight)) { flash("Write the key insight in a few words first."); return; }
     const own = attemptFor(a.slug);
-    commitAttempt(a.slug, buildRecord(own, st, { accepted: true, manual: false, explain: { why: a.why.trim(), insight: a.insight.trim() } }, a.slug));
+    const elig = R.eligibility(buildRecord(own, st, { accepted: true, manual: false, explain: { why: a.why.trim(), insight: a.insight.trim() } }, a.slug));
+    if (st === "a" && !elig.alone) { flash(elig.reasons[0] || "This one counts as needed help."); return; }
+    if (!commitAttempt(a.slug, buildRecord(own, st, { accepted: true, manual: false, explain: { why: a.why.trim(), insight: a.insight.trim() } }, a.slug))) return;
     P.acceptResult(a.slug, st);
     reopen(a.slug);
     ctx.accepted = null; flash(st === "a" ? "Marked as solved alone. Your insight is saved for the redo." : "Marked as needed help. It comes back for a redo."); },
   "accept-dismiss": () => { ctx.accepted = null; render(); },
-  redo: (el) => { const slug = el.dataset.slug; commitAttempt(slug, buildRecord(attemptFor(slug), el.dataset.ok === "1" ? "a" : "h", { accepted: false, manual: true }, slug)); P.redoResult(slug, el.dataset.ok === "1"); reopen(slug); flash(el.dataset.ok === "1" ? "Nice. Next redo is scheduled further out." : "No problem. It comes back in 3 days."); },
+  redo: (el) => { const slug = el.dataset.slug;
+    const block = R.manualMarkBlock(store.S.progress, slug, gating() && slug === ctx.curSlug);
+    if (block) { flash(block); return; }
+    if (!commitAttempt(slug, buildRecord(attemptFor(slug), el.dataset.ok === "1" ? "a" : "h", { accepted: false, manual: true }, slug))) return;
+    P.redoResult(slug, el.dataset.ok === "1"); reopen(slug); flash(el.dataset.ok === "1" ? "Nice. Next redo is scheduled further out." : "No problem. It comes back in 3 days."); },
   replan: () => { P.replan(); ctx.view = new Date(); flash("Re-planned from today. Your finish date moved, nothing was lost."); },
   "show-full": () => { ctx.showFull = true; render(); },
   "timer-reset": () => { T.reset(); syncFocus(); render(); },
@@ -334,7 +359,7 @@ const actions = {
   sidebar: toggleSidebar,
   "lc-back": () => api.back(),
   "lc-home": () => api.home(),
-  hub: () => api.openHub(),
+  hub: () => { store.saveNow(); api.openHub(); },
   "change-plan": () => editPlan(2),
   "plan-hours": () => editPlan(4),
   "plan-new": newPlan,
@@ -366,9 +391,9 @@ document.addEventListener("mousedown", (e) => {
 
 document.addEventListener("input", (e) => {
   const t = e.target;
-  if (t.dataset?.think && ctx.attempt && t.tagName !== "SELECT") ctx.attempt.think[t.dataset.think] = t.value;
-  if (t.id === "exWhy" && ctx.accepted) ctx.accepted.why = t.value;
-  if (t.id === "exInsight" && ctx.accepted) ctx.accepted.insight = t.value;
+  if (t.dataset?.think && ctx.attempt && t.tagName !== "SELECT") { ctx.attempt.think[t.dataset.think] = t.value; persistOpen(); }
+  if (t.id === "exWhy" && ctx.accepted) { ctx.accepted.why = t.value; persistOpen(); }
+  if (t.id === "exInsight" && ctx.accepted) { ctx.accepted.insight = t.value; persistOpen(); }
   if (t.id === "import") { ctx.importText = t.value; const n = parseImport(t.value).length; const s = t.parentElement.querySelector(".muted"); if (s) s.textContent = `${n} problems recognised`; const b = t.parentElement.querySelector("[data-act=use-import]"); if (b) b.disabled = !n; }
   if (t.id === "hours") {                       // live update without re-rendering (keeps the slider dragging)
     ctx.draft.hoursPerDay = ctx.draft.hoursManual = +t.value;
@@ -387,6 +412,7 @@ document.addEventListener("change", (e) => {
   const t = e.target;
   if (t.dataset?.think && ctx.attempt && t.tagName === "SELECT") {
     ctx.attempt.think[t.dataset.think] = t.dataset.think === "pattern" ? (t.value === "" ? null : +t.value) : t.value;
+    persistOpen();
     if (t.dataset.think === "complexity") render();
   }
   if (t.id === "targetDate" && t.value) { ctx.draft.targetDate = t.value; render(); }
@@ -418,7 +444,7 @@ api.onUrl(async (u) => {
   // Opening the editorial or community solutions: note it, and warn if it's early.
   if (slug && /\/problems\/[^/]+\/(editorial|solutions)(\/|$|\?)/.test(u) && ctx.attempt && ctx.attempt.slug === slug && !ctx.attempt.sawAt) {
     ctx.attempt.sawAt = Date.now();
-    if (A.markSolutionSeen(solutionSeenMap(), slug, ctx.attempt.sawAt)) store.save();
+    if (A.markSolutionSeen(solutionSeenMap(), slug, ctx.attempt.sawAt)) persistOpen(true);
     const mins = attemptMins();
     if (P.planned().some((p) => p.slug === slug)) flash(mins < 30
       ? `Solution opened after ${mins} min. Try 30 min alone first. If you read on, this one counts as "Help".`
@@ -434,8 +460,10 @@ function onAccepted(slug) {
   const p = P.planned().find(x => x.slug === slug) || P.redoDue().find(x => x.slug === slug);
   if (!p || (P.isDone(slug) && !redo) || ctx.route !== "workspace") return;
   const own = attemptFor(slug);
-  const elig = R.eligibility(buildRecord(own, "a", { accepted: true, manual: false }, slug));
-  ctx.accepted = { slug, suggest: elig.alone ? "a" : "h", mins: own ? attemptMins() : 0, elig, why: "", insight: "" }; render();
+  const prior = own?.explain || store.S.progress.open?.[slug]?.explain || { why: "", insight: "" };
+  const elig = R.eligibility(buildRecord(own, "a", { accepted: true, manual: false, explain: { why: (prior.why || "").trim(), insight: (prior.insight || "").trim() } }, slug));
+  const blocked = elig.reasons.filter((r) => !/key insight/i.test(r));
+  ctx.accepted = { slug, suggest: blocked.length ? "h" : "a", mins: own ? attemptMins() : 0, elig, blocked, why: prior.why || "", insight: prior.insight || "" }; render();
 }
 api.onAccepted(onAccepted);
 api.onBlocked((u) => { let h = u; try { h = new URL(u).hostname; } catch {} flash(`Blocked ${h} during your focus block.`); });
@@ -491,8 +519,10 @@ drag.addEventListener("dblclick", () => { store.S.ui.width = 380; store.save(); 
 // ---------- shared top bar: the other tabs open in the Hub ----------
 document.getElementById("topnav")?.addEventListener("click", (e) => {
   const b = e.target.closest("[data-hub]");
-  if (b) api.openHub(b.dataset.hub);
+  if (b) { store.saveNow(); api.openHub(b.dataset.hub); }
 });
+
+window.__flushSaves = () => store.saveNow();
 
 // ---------- start ----------
 (async () => {

@@ -68,6 +68,18 @@ test("the insight stays hidden until the editor is unlocked", () => {
   assert.doesNotMatch(html, new RegExp(INSIGHT));
 });
 
+test("the Accepted card shows the eligibility note instead of hiding it", () => {
+  baseState();
+  store.S.timer = { mode: "work", left: 1500, running: false, endsAt: 0 };
+  const html = Ws.render(ctx({
+    flash: "Write the key insight in a few words first.",
+    accepted: { slug: "two-sum", mins: 12, suggest: "h", why: "", insight: "", elig: { alone: false, reasons: ["You opened the solution"] }, blocked: ["You opened the solution"] },
+  }));
+  assert.match(html, /Write the key insight in a few words first/);
+  assert.match(html, /Counts as Help: you opened the solution/);
+  assert.match(html, /accept-mark" data-st="a" disabled/);
+});
+
 test("a slow complexity estimate is a warning and the unlock button stays available", () => {
   baseState();
   store.S.timer = { mode: "work", left: 1500, running: false, endsAt: 0 };

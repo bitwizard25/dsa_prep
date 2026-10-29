@@ -1,5 +1,5 @@
 // The schedule engine. Pure functions: same inputs always give the same plan.
-import { parse, addDays, fmt, diffDays } from "./dates.js";
+import { parse, addDays, fmt, diffDays, isValidDay } from "./dates.js";
 
 /** Minutes per problem, including reading, attempting and a short review. */
 export const COST = { E: 20, M: 40, H: 60 };
@@ -11,7 +11,12 @@ export function isStudyDay(date, daysPerWeek) {
   if (daysPerWeek === 6) return w !== 0;
   return w !== 0 && w !== 6;
 }
-const nextStudyDay = (date, dpw) => { let d = date; while (!isStudyDay(d, dpw)) d = addDays(d, 1); return d; };
+const nextStudyDay = (date, dpw) => {
+  let d = date, n = 0;
+  if (!(d instanceof Date) || Number.isNaN(d.getTime())) return null;
+  while (!isStudyDay(d, dpw)) { if (++n > 14) return null; d = addDays(d, 1); }
+  return d;
+};
 
 /**
  * Pack the queue into days. Each day holds as many problems as fit in hoursPerDay.
@@ -23,7 +28,7 @@ export function schedule(queue, { hoursPerDay, daysPerWeek, startDate, problemsP
   }
   const cap = Math.max(20, hoursPerDay * 60);
   const days = [];
-  if (!queue.length) return days;
+  if (!queue.length || !isValidDay(startDate)) return days;
   // Plans set up from the Hub carry a problem count chosen by the user: exactly that many a day.
   if (problemsPerDay > 0) {
     let date = nextStudyDay(parse(startDate), daysPerWeek);

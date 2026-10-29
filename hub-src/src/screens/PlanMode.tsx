@@ -13,7 +13,7 @@ export function defaultGoal(): Goal {
 }
 
 export function PlanMode({ initial, onDone, onCancel }: { initial: Goal | null; onDone: (g: Goal) => void; onCancel?: () => void }) {
-  const [g, setG] = useState<Goal>(initial ? { ...initial, startDate: todayKey() } : defaultGoal());
+  const [g, setG] = useState<Goal>(initial ? { ...initial } : defaultGoal());
   const [step, setStep] = useState(0);              // 0-3 questions, 4 building, 5 result
   const [custom, setCustom] = useState(false);
   const [fixShown, setFixShown] = useState(false);

@@ -12,6 +12,13 @@ else {
     appWin = new AppWindow();
     registerIpc(appWin);
   });
-  app.on("before-quit", () => { app.isQuitting = true; });
+  let quitting = false;
+  app.on("before-quit", (e) => {
+    app.isQuitting = true;
+    if (quitting || !appWin) return;
+    e.preventDefault();
+    quitting = true;
+    Promise.resolve(appWin.flushPage()).finally(() => app.quit());
+  });
   app.on("window-all-closed", () => app.quit());
 }

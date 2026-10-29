@@ -10,16 +10,48 @@ const isLeetCode = (u) => {
 };
 const isLoginUrl = (u) => isLeetCode(u) && /\/accounts\/(login|signup)/.test(u);
 
+// A status counts only when a line is exactly "Accepted". "Not Accepted" does not.
+function exactAccepted(text) {
+  return String(text || "").split(/\n/).map((s) => s.trim()).filter(Boolean).includes("Accepted");
+}
+/**
+ * Decide whether this page view is a fresh Accepted result.
+ * The submission that is already on screen (or opened from the submissions list) is old.
+ * A result counts only after the user leaves the problem editor for a new submission id,
+ * on leetcode.com, and the status line is exactly Accepted.
+ */
+function trackSubmission(state, href, statusText) {
+  const next = state || { prevPath: "", fresh: {}, done: {} };
+  next.fresh ||= {}; next.done ||= {};
+  let url;
+  try { url = new URL(href); } catch { return { fire: false, state: next }; }
+  const host = url.hostname;
+  if (url.protocol !== "https:" || !(host === "leetcode.com" || host.endsWith(".leetcode.com"))) return { fire: false, state: next };
+  const m = url.pathname.match(/^\/problems\/([a-z0-9-]+)\/submissions\/(\d+)\/?$/);
+  if (!m) { next.prevPath = url.pathname; return { fire: false, state: next }; }
+  const slug = m[1], id = m[2];
+  const fromEditor = /^\/problems\/[a-z0-9-]+\/(description\/?)?$/.test(next.prevPath || "");
+  if (next.fresh[id] === undefined) next.fresh[id] = fromEditor;
+  next.prevPath = url.pathname;
+  const accepted = String(statusText || "").split(/\n/).map((s) => s.trim()).filter(Boolean).includes("Accepted");
+  if (!next.fresh[id] || next.done[id]) return { fire: false, state: next, slug, id };
+  if (!accepted) return { fire: false, state: next, slug, id };
+  next.done[id] = true;
+  return { fire: true, state: next, slug, id };
+}
+
 // Watches the LeetCode page for two things that don't change the URL in a useful way:
 //  - the login popup (a password box) -> the app starts the real-browser login instead;
-//  - an "Accepted" submission result -> the app offers one-tap marking.
+//  - a fresh "Accepted" submission for the problem the user just submitted.
 const WATCH = `(() => { if (window.__dsaWatch) return; window.__dsaWatch = true;
+  const track = ${trackSubmission.toString()};
+  const state = { prevPath: "", fresh: {}, done: {} };
   let last = 0;
   const check = () => {
     if (document.querySelector('input[type="password"]') && Date.now() - last > 8000) { last = Date.now(); console.log("__DSA_NEED_LOGIN__"); }
-    const m = location.pathname.match(/\\/problems\\/([^/]+)\\/submissions\\/(\\d+)/);
     const res = document.querySelector('[data-e2e-locator="submission-result"]');
-    if (m && res && /Accepted/.test(res.textContent) && window.__dsaAcc !== m[2]) { window.__dsaAcc = m[2]; console.log("__DSA_ACCEPTED__:" + m[1]); }
+    const out = track(state, location.href, res ? res.textContent : "");
+    if (out.fire) console.log("__DSA_ACCEPTED__:" + out.slug);
   };
   new MutationObserver(() => { clearTimeout(window.__dsaT); window.__dsaT = setTimeout(check, 250); })
     .observe(document.documentElement, { childList: true, subtree: true });
@@ -87,7 +119,12 @@ class LeetCodeView {
     });
     wc.on("console-message", ({ message: msg }) => {
       if (msg === "__DSA_NEED_LOGIN__") send("need-login");
-      else if (typeof msg === "string" && msg.startsWith("__DSA_ACCEPTED__:")) send("accepted", msg.slice(17));
+      else if (typeof msg === "string" && msg.startsWith("__DSA_ACCEPTED__:")) {
+        const slug = msg.slice("__DSA_ACCEPTED__:".length);
+        let current = "";
+        try { current = new URL(wc.getURL()).pathname.match(/^\/problems\/([a-z0-9-]+)\/submissions\/\d+\/?$/)?.[1] || ""; } catch {}
+        if (isLeetCode(wc.getURL()) && current && current === slug) send("accepted", slug);
+      }
     });
   }
 
@@ -183,4 +220,4 @@ class LeetCodeView {
   }
 }
 
-module.exports = { LeetCodeView, isLeetCode, HOME, coverScript };
+module.exports = { LeetCodeView, isLeetCode, HOME, coverScript, exactAccepted, trackSubmission, WATCH };

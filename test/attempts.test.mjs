@@ -52,6 +52,24 @@ test("a recorded try starts clean, and a saved solution time fills a new session
   assert.equal(again.attempt.think.brute, "");
 });
 
+test("a saved draft restores pattern tries, the solution flag, and the explain-back", () => {
+  const memory = {};
+  const disk = {
+    start: 20, sawAt: 40, gate: true, unlocked: true, unlockedAt: 30,
+    think: { complexity: "O(n)", brute: "check every pair of numbers", waste: "repeats the scan", pattern: 0, patternTries: 1, patternCorrect: true, skipped: false },
+    explain: { why: "one pass", insight: "use a hash map" },
+  };
+  const { attempt, restored } = A.resolveAttempt(memory, {}, "two-sum", () => blank("two-sum"), disk, true);
+  assert.equal(restored, true);
+  assert.equal(attempt.think.patternTries, 1);
+  assert.equal(attempt.think.patternCorrect, true);
+  assert.equal(attempt.sawAt, 40);
+  assert.equal(attempt.explain.insight, "use a hash map");
+  assert.equal(attempt.unlocked, true);
+  const again = A.resolveAttempt({}, { "two-sum": 99 }, "two-sum", () => blank("two-sum"), { ...disk, sawAt: null }, true);
+  assert.equal(again.attempt.sawAt, 99);
+});
+
 test("the first solution view sticks until the try is dropped", () => {
   const seen = {};
   assert.equal(A.markSolutionSeen(seen, "two-sum", 10), true);

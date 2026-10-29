@@ -1,7 +1,7 @@
 // Today: what now, why, what's next, and am I on track. Plus the session view it opens.
 import { useEffect, useState } from "preact/hooks";
 import { SUBJECT, ROLES, COMPANIES } from "../core/catalog";
-import { clock, parse, todayKey, priorityOf, daysBetween, buildPlan, dsaMinutesFor, MIN_PER_PROBLEM, MIN_OTHERS, type Plan } from "../core/planner";
+import { clock, parse, todayKey, istParts, priorityOf, daysBetween, buildPlan, dsaMinutesFor, MIN_PER_PROBLEM, MIN_OTHERS, type Plan } from "../core/planner";
 import { dsaSetupFor } from "../core/dsa-setup";
 import { SUBJECTS } from "../core/catalog";
 import { today, recommend, sessionLabel, subjectReadiness, overallReadiness, pace, currentTopic, mustDo, type TodayItem } from "../core/progress";
@@ -15,7 +15,7 @@ import { startHere, fitNote } from "../core/resources";
 
 export interface Ctx { hub: HubState; plan: Plan; dsa?: DsaSummary; go: (r: string, arg?: any) => void }
 
-const greeting = () => { const h = new Date().getHours(); return h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening"; };
+const greeting = () => { const h = istParts().hour; return h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening"; };
 
 export function goalName(plan: Plan) {
   const r = ROLES.find((x) => x.id === plan.goal.role)?.name, c = COMPANIES.find((x) => x.id === plan.goal.company);
@@ -110,7 +110,7 @@ function Hero({ ctx, item, next }: { ctx: Ctx; item: TodayItem; next: TodayItem 
       return v ? <p class="start-here"><Icon.play /><span>Start here: <b>{v.title}</b>, {v.channel.replace(/\s*\(.*\)/, "")}, {v.minutes} min{fitNote(v, item.minutes)}</span></p> : null; })()}
     <div class="row">
       {active ? <>
-        <Button kind="primary" size="lg" onClick={() => (item.subject === "dsa" ? api.openPractice({ next: true }) : ctx.go("session", item.id))}><Icon.play /> Continue session</Button>
+        <Button kind="primary" size="lg" onClick={() => (item.subject === "dsa" ? saveNow().then(() => api.openPractice({ next: true })) : ctx.go("session", item.id))}><Icon.play /> Continue session</Button>
         {(item.subject !== "dsa" || !ctx.dsa?.hasPlan || (!item.fromDate && !ctx.dsa.todayTotal)) && <Button onClick={() => ctx.go("complete", item.id)}>Complete</Button>}
       </> : <>
         <Button kind="primary" size="lg" onClick={() => startSession(ctx, item)}><Icon.play /> Start session</Button>

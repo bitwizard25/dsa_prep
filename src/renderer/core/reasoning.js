@@ -118,7 +118,18 @@ export function eligibility(rec) {
   if (rec.sawSolution) reasons.push("You opened the solution");
   if (rec.manual) reasons.push("Marked by hand, not after Accepted");
   else if (!rec.accepted) reasons.push("Not marked after an Accepted submission");
+  if (!rec.explain || !wordsOk(rec.explain.insight)) reasons.push("The key insight was not written down");
   return { alone: reasons.length === 0, reasons };
+}
+/** A manual mark must not replace a solve that already earned verified alone. */
+export function canManualMark(progress, slug) {
+  return !isVerifiedAlone(progress, slug);
+}
+/** Why a manual Solved alone / Needed help mark is refused, or "" when it is allowed. */
+export function manualMarkBlock(progress, slug, gated) {
+  if (gated) return "Finish Think-first or skip it before marking this problem.";
+  if (!canManualMark(progress, slug)) return "This problem is already verified as solved alone. A manual mark can't replace that.";
+  return "";
 }
 
 export function recordAttempt(progress, slug, rec, cap = 5) {
