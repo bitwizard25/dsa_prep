@@ -4,7 +4,7 @@
   "description": "Personal LeetCode practice app: company-based plans, focus timer, streaks, all saved locally",
   "main": "src/main/index.js",
   "scripts": {
-    "test": "node --test tests/*.test.*",
+    "test": "node --test tests/*.test.* test/*.test.mjs",
     "check": "npm test && npm --prefix hub-src run check",
     "smoke": "electron tools/smoke-electron.cjs",
     "start": "electron .",

@@ -1,5 +1,5 @@
 // Judging the Think-first step and attempts. Pure functions only: no DOM, no Electron, no storage.
-// Unit-tested in test/reasoning.test.mjs. Shared by the practice app and the Hub (via the bridge).
+// Unit-tested in tests/reasoning.test.mjs. Shared by the practice app and the Hub (via the bridge).
 import { PATTERNS } from "../data/dataset.js";
 
 const PI = (name) => PATTERNS.indexOf(name);
@@ -88,26 +88,33 @@ export function wordsOk(text, min = 3) {
 
 const fmtN = (n) => (n >= 1e4 && /^10*$/.test(String(n)) ? `10^${String(n).length - 1}` : n.toLocaleString("en-IN"));
 
-/** What's still missing before the editor opens, and whether the pattern fits (null when unknown). */
+/**
+ * What's still missing before the editor opens, and whether the pattern fits (null when unknown).
+ * A slow-looking complexity is a warning, not a block. The check uses one size (the largest n it
+ * can see). Real problems also depend on m, k, or other limits, so a "too slow" guess must not
+ * keep the editor locked.
+ */
 export function checkThink(think, facts) {
   const problems = [];
   if (!COMPLEXITIES.includes(think.complexity)) problems.push("Pick the time complexity you're aiming for.");
   if (!wordsOk(think.brute)) problems.push("Describe the brute force in a few words.");
   if (!wordsOk(think.waste)) problems.push("Say what the brute force repeats or wastes.");
   if (think.pattern === null || think.pattern === undefined || think.pattern < 0) problems.push("Pick a pattern.");
+  let warning = "";
   const n = facts ? facts.n : null;
   if (COMPLEXITIES.includes(think.complexity) && fitsBudget(think.complexity, n) === "too-slow") {
-    problems.unshift(`With n up to ${fmtN(n)}, ${think.complexity} may be too slow. Consider ${budgetFor(n)} or better.`);
+    warning = `With n up to ${fmtN(n)}, ${think.complexity} may be too slow. Consider ${budgetFor(n)} or better.`;
   }
   const patternRight = !facts || think.pattern === null || think.pattern === undefined ? null : facts.accepted.includes(think.pattern);
-  return { problems, patternRight };
+  return { problems, patternRight, warning };
 }
 
 /** "Solved alone" is earned, not clicked: every condition must hold. */
 export function eligibility(rec) {
   const reasons = [];
   if (!rec.think || rec.think.skipped) reasons.push("Think-first was skipped");
-  else if (rec.think.patternTries !== 1 || rec.think.patternCorrect !== true) reasons.push("The pattern was not confirmed on the first try");
+  // patternTries 0 is not a confirmed choice. An unconfirmed pattern never counts, even if the other fields look right.
+  else if (rec.think.patternTries !== 1 || rec.think.patternCorrect !== true || rec.think.patternUnconfirmed) reasons.push("The pattern was not confirmed on the first try");
   if (rec.sawSolution) reasons.push("You opened the solution");
   if (rec.manual) reasons.push("Marked by hand, not after Accepted");
   else if (!rec.accepted) reasons.push("Not marked after an Accepted submission");

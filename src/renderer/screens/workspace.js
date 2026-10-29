@@ -90,6 +90,7 @@ function thinkPanel(ctx) {
   const a = ctx.attempt, t = a.think, f = a.facts;
   const prob = P.problemOf(a.slug) || { title: a.slug };
   const budget = f && f.n ? `n up to ${f.n.toLocaleString("en-IN")}: aim for ${R.budgetFor(f.n)} or better.` : f ? "Constraints unavailable: read them in the problem statement." : "Reading the constraints…";
+  const warning = f ? R.checkThink(t, f).warning : "";
   const sel = (k, opts, cur, ph) => `<select data-think="${k}" aria-label="${ph}"><option value="">${ph}</option>${opts.map(([v, l]) => `<option value="${v}" ${String(cur) === String(v) ? "selected" : ""}>${esc(l)}</option>`).join("")}</select>`;
   return `<div class="think" aria-live="polite">
     <span class="eyebrow">Think first</span>
@@ -99,6 +100,7 @@ function thinkPanel(ctx) {
     <label><b>2. Brute force</b><small>The simplest thing that works, and its cost.</small><textarea data-think="brute" rows="2">${esc(t.brute)}</textarea></label>
     <label><b>3. What it wastes</b><small>The work it repeats or throws away.</small><textarea data-think="waste" rows="2">${esc(t.waste)}</textarea></label>
     <label><b>4. Pattern</b><small>Which of the 14 removes that waste?</small>${sel("pattern", PATTERNS.map((p, i) => [i, p]), t.pattern === null ? "" : t.pattern, "Pick a pattern")}</label>
+    ${warning ? `<p class="think-warn" role="status">${esc(warning)}</p>` : ""}
     ${a.nudge ? `<p class="think-nudge" role="alert">${esc(a.nudge)}</p>` : ""}
     <div class="row"><button class="btn primary" data-act="think-unlock">Unlock editor</button></div>
     <button class="textbtn" data-act="think-skip">Skip Think-first (won't count as solved alone)</button>
@@ -117,7 +119,6 @@ function focusPanel(ctx) {
       <h2>${esc(cur.title)}</h2>
       <p class="meta"><span class="t-${cur.d}">${({ E: "Easy", M: "Medium", H: "Hard" })[cur.d] || ""}</span>, ${esc(cur.pattern || "")}</p>
       ${ctx.attempt?.slug === cur.slug && ctx.attempt.gate && !ctx.attempt.think.skipped && ctx.attempt.think.complexity ? `<p class="myplan"><b>Your plan:</b> ${esc(ctx.attempt.think.complexity)}, ${esc(PATTERNS[ctx.attempt.think.pattern] || "")}</p>` : ""}
-      ${ctx.attempt?.slug === cur.slug && ctx.attempt.unlocked && P.lastInsight(cur.slug) ? `<details class="insight"><summary>Your insight from last time</summary><p>${esc(P.lastInsight(cur.slug))}</p></details>` : ""}
       <div class="alone"><div class="abar"><i id="aloneBar" style="width:${pct}%"></i></div>
         <span id="aloneTxt">${mins < 30 ? `${mins} min alone. Solution unlocks guilt-free at 30.` : `${mins} min. Stuck? Read the approach only, then code it yourself.`}</span></div>
       <div class="row"><button class="btn primary sm" data-act="mark-cur" data-st="a">Solved alone</button><button class="btn sm" data-act="mark-cur" data-st="h">Needed help</button></div>
@@ -254,6 +255,19 @@ function tabSettings(ctx) {
 
 const TABS = [["today", "Problems"], ["plan", "Plan"], ["redo", "Redo"], ["log", "Log"], ["settings", "Settings"]];
 
+// Shown after unlock, outside the focus panel, so a break (or a paused timer) cannot hide it.
+function reviewNotes(ctx) {
+  const a = ctx.attempt;
+  if (!a || a.slug !== ctx.curSlug || !a.unlocked) return "";
+  const warn = a.think && a.think.complexityWarning;
+  const text = P.lastInsight(a.slug);
+  if (!warn && !text) return "";
+  return `<div class="review-notes">
+    ${warn ? `<p class="think-warn" role="status">${esc(warn)}</p>` : ""}
+    ${text ? `<details class="insight" open><summary>Your insight from last time</summary><p>${esc(text)}</p></details>` : ""}
+  </div>`;
+}
+
 export function render(ctx) {
   if (store.S.ui.collapsed) return renderMini(ctx);
   const di = P.currentDayIndex(), ds = P.days();
@@ -274,6 +288,7 @@ export function render(ctx) {
     ${timerBar()}
     ${tracker()}
     ${note(ctx)}
+    ${reviewNotes(ctx)}
     <nav class="tabs" role="tablist">${TABS.map(([k, l]) => `<button role="tab" aria-selected="${ctx.tab === k}" class="${ctx.tab === k ? "on" : ""}" data-act="tab" data-tab="${k}">${l}${k === "redo" && redoN ? `<i>${redoN}</i>` : ""}</button>`).join("")}</nav>
     <div class="panel">${content}</div>
   </div>`;

@@ -85,6 +85,29 @@ export function redoResult(slug, ok) {
   } else { r.stage = 0; r.due = dueIn(REDO_GAPS[0]); }
   store.save();
 }
+
+/**
+ * Result from the Accepted card.
+ * A redo that is due keeps its schedule. Solved alone also changes Help ('h') to Alone ('a')
+ * so the Hub can count a verified solve. Needed help leaves the Help mark in place.
+ * A problem that is not on a due redo is marked the usual way.
+ */
+export function acceptResult(slug, st) {
+  const entry = redos()[slug];
+  const due = !!(entry && entry.due <= todayKey());
+  if (due) {
+    const pr = S().progress;
+    if (st === "a") {
+      pr.status[slug] = "a";
+      pr.when[slug] = todayKey();
+    } else if (st === "h") {
+      pr.status[slug] = "h";
+    }
+    redoResult(slug, st === "a");
+    return;
+  }
+  setMark(slug, st);
+}
 export const problemOf = (slug) => BY_SLUG.get(slug) || (S().profile.custom || []).find((p) => p.slug === slug);
 export const redoDue = () => Object.entries(redos()).filter(([, r]) => r.due <= todayKey()).map(([slug, r]) => ({ ...problemOf(slug), redo: r })).filter((p) => p.slug);
 export const redoAll = () => Object.entries(redos()).sort((a, b) => (a[1].due < b[1].due ? -1 : 1)).map(([slug, r]) => ({ ...problemOf(slug), redo: r })).filter((p) => p.slug);

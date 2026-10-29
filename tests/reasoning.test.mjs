@@ -40,14 +40,17 @@ test("wordsOk rejects filler", () => {
   for (const bad of ["", "idk", "n/a", "...", "a b"]) assert.equal(R.wordsOk(bad), false, bad);
 });
 
-test("checkThink: lists what's missing, flags slow complexity, judges the pattern", () => {
+test("checkThink: lists what's missing, warns on slow complexity, judges the pattern", () => {
   const facts = { n: 1e5, lines: [], tags: [], accepted: [P("Sliding Window")], live: true };
   const empty = { complexity: "", brute: "", waste: "", pattern: null, patternTries: 0, skipped: false };
   assert.equal(R.checkThink(empty, facts).problems.length, 4);
   const slow = { complexity: "O(n^2)", brute: "try every start and end", waste: "recounts the same window", pattern: P("Sliding Window"), patternTries: 0, skipped: false };
-  assert.match(R.checkThink(slow, facts).problems[0], /too slow/);
+  const slowCheck = R.checkThink(slow, facts);
+  assert.deepEqual(slowCheck.problems, []);
+  assert.match(slowCheck.warning, /too slow/);
+  assert.equal(slowCheck.patternRight, true);
   const good = { ...slow, complexity: "O(n)" };
-  assert.deepEqual(R.checkThink(good, facts), { problems: [], patternRight: true });
+  assert.deepEqual(R.checkThink(good, facts), { problems: [], patternRight: true, warning: "" });
   assert.equal(R.checkThink({ ...good, pattern: P("Graphs") }, facts).patternRight, false);
   assert.equal(R.checkThink(good, null).patternRight, null);
 });
@@ -80,8 +83,15 @@ test("attempt storage: newest last, capped, verified-alone reads the latest", ()
 test("eligibility requires one positively verified pattern choice", () => {
   const base = { think: { patternTries: 1, patternCorrect: true, skipped: false }, accepted: true, manual: false, sawSolution: false };
   assert.equal(R.eligibility(base).alone, true);
-  for (const think of [{ patternTries: 0, patternCorrect: true }, { patternTries: 1 }, { patternTries: 1, patternCorrect: false }, { patternTries: 2, patternCorrect: true }]) {
-    assert.equal(R.eligibility({ ...base, think }).alone, false);
+  for (const think of [
+    { patternTries: 0, patternCorrect: true },
+    { patternTries: 0, patternCorrect: false },
+    { patternTries: 1 },
+    { patternTries: 1, patternCorrect: false },
+    { patternTries: 1, patternCorrect: true, patternUnconfirmed: true },
+    { patternTries: 2, patternCorrect: true },
+  ]) {
+    assert.equal(R.eligibility({ ...base, think }).alone, false, JSON.stringify(think));
   }
 });
 
