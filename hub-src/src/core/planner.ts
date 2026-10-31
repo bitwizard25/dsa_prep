@@ -1,31 +1,23 @@
 // The planning engine. Pure functions: the same goal always produces the same plan.
 import { SUBJECTS, SUBJECT, ROLES, COMPANIES, LEVELS, type SubjectId, type Level, type Topic } from "./catalog";
 
-// ---------- dates ("YYYY-MM-DD", Asia/Kolkata) ----------
-// Calendar arithmetic uses the day string. "Today" and instants are read in IST, not the OS timezone.
-const IST = "Asia/Kolkata";
+// ---------- dates ("YYYY-MM-DD", the computer's local time zone) ----------
 export const parse = (s: string) => { const [y, m, d] = String(s || "").split("-").map(Number); return new Date(y, m - 1, d); };
 export const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 export const addDays = (d: Date, n: number) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
-export function istParts(now: Date = new Date()) {
-  const parts = new Intl.DateTimeFormat("en-US", { timeZone: IST, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(now);
-  const num = (type: string) => Number(parts.find((p) => p.type === type)?.value || "0");
-  let hour = num("hour");
-  if (hour === 24) hour = 0;
-  return { year: num("year"), month: num("month"), day: num("day"), hour, minute: num("minute") };
-}
-export const todayKey = (now: Date = new Date()) => { const p = istParts(now); return `${p.year}-${String(p.month).padStart(2, "0")}-${String(p.day).padStart(2, "0")}`; };
+export const todayKey = (now: Date = new Date()) => fmt(now);
 export function instantKey(value?: string | Date | null): string {
   if (!value) return "";
   if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
   const d = value instanceof Date ? value : new Date(value);
-  return Number.isNaN(d.getTime()) ? "" : todayKey(d);
+  return Number.isNaN(d.getTime()) ? "" : fmt(d);
 }
-export const istMinutes = (now: Date = new Date()) => { const p = istParts(now); return p.hour * 60 + p.minute; };
-/** UTC milliseconds for midnight at the start of today's Kolkata date. */
-export function istMidnightMs(now: Date = new Date()) {
-  const [y, m, d] = todayKey(now).split("-").map(Number);
-  return Date.UTC(y, m - 1, d) - (5 * 60 + 30) * 60 * 1000;
+export const localMinutes = (now: Date = new Date()) => now.getHours() * 60 + now.getMinutes();
+/** UTC milliseconds of local midnight at the start of this calendar day. */
+export function localMidnightMs(now: Date = new Date()) {
+  const d = new Date(now);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
 }
 export function isValidDay(s: unknown): s is string {
   return typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(parse(s).getTime()) && fmt(parse(s)) === s;

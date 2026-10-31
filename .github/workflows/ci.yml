@@ -17,9 +17,23 @@ jobs:
           cache-dependency-path: |
             package-lock.json
             hub-src/package-lock.json
-      - run: npm ci
+      - name: Install
+        if: runner.os != 'Linux'
+        run: npm ci
         env:
           ELECTRON_SKIP_BINARY_DOWNLOAD: 1
+      - name: Install with Electron
+        if: runner.os == 'Linux'
+        run: npm ci
       - run: npm ci --prefix hub-src
       - run: npm run check
       - run: npm run build:hub
+      - name: Electron tests
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb
+          xvfb-run -a npx electron tests/electron-cover.cjs
+          xvfb-run -a npx electron tests/smoke-think.cjs
+          xvfb-run -a npx electron tests/e2e/think-review.cjs
+          xvfb-run -a npm run smoke

@@ -25,8 +25,8 @@ export function newDraft() {
   return {
     sources: prev, custom: p.custom || [], patterns: known ? p.patterns.slice() : PATTERNS.slice(), skipSolved: true,
     perPattern: p.perPattern || 30, premium: !!p.premium,
-    hoursPerDay: p.hoursPerDay || 3, daysPerWeek: p.daysPerWeek || 6,
-    startDate: todayKey(), planMode: p.planMode || "hours",
+    hoursPerDay: p.hoursPerDay || 3, daysPerWeek: p.daysPerWeek || 6, problemsPerDay: p.problemsPerDay || 0,
+    startDate: todayKey(), planMode: p.problemsPerDay > 0 ? "count" : (p.planMode || "hours"),
     targetDate: p.targetDate || fmt(addDays(new Date(), 28)),
   };
 }
@@ -188,13 +188,15 @@ export function summaryHtml(d) {
 
 function stepSchedule(ctx) {
   const d = ctx.draft;
+  const byCount = d.planMode === "count" || d.problemsPerDay > 0;
   const seg = (name, val, label) => `<button class="${String(d[name]) === String(val) ? "on" : ""}" data-act="set" data-k="${name}" data-v="${val}">${label}</button>`;
-  return `<header class="sh"><p class="eyebrow">Step 4 of 4</p><h2>How much time do you have?</h2>
-    <p class="lead">Your daily list is sized to your hours. Change it any time from the Plan tab.</p></header>
+  const counts = [1, 2, 3, 4, 5, 6, 8].map((n) => seg("problemsPerDay", n, String(n))).join("");
+  return `<header class="sh"><p class="eyebrow">Step 4 of 4</p><h2>${byCount ? "How many problems a day?" : "How much time do you have?"}</h2>
+    <p class="lead">${byCount ? "You pick the number. Study days and this count are shared with the Hub." : "Your daily list is sized to your hours. Change it any time from the Plan tab."}</p></header>
     <div class="two">
       <div class="controls">
-        <div class="segment wide">${seg("planMode", "hours", "I have X hours a day")}${seg("planMode", "date", "Finish by a date")}</div>
-        ${d.planMode === "hours" ? `
+        ${byCount ? "" : `<div class="segment wide">${seg("planMode", "hours", "I have X hours a day")}${seg("planMode", "date", "Finish by a date")}</div>`}
+        ${byCount ? `<div class="field"><span>Problems per day</span><div class="segment">${counts}</div></div>` : d.planMode === "hours" ? `
           <label class="field"><span>Hours per day</span>
             <div class="slider"><input type="range" id="hours" min="0.5" max="10" step="0.5" value="${d.hoursPerDay}"><output id="hoursOut">${d.hoursPerDay} h</output></div></label>`
         : `<label class="field"><span>Finish by</span><input type="date" id="targetDate" value="${d.targetDate}" min="${todayKey()}"></label>`}

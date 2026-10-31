@@ -16,7 +16,7 @@ function planMenu() {
   return `<details class="planmenu"><summary class="chip" title="Plan options">${esc(srcName())}<span class="caret">${ICON.fwd}</span></summary>
     <div class="pop">
       <button data-act="change-plan">${ICON.target}<span><b>Edit companies & patterns</b><small>Keeps everything you've solved</small></span></button>
-      <button data-act="plan-hours">${ICON.clock}<span><b>Adjust hours & days</b><small>Same problems, new schedule</small></span></button>
+      <button data-act="plan-hours">${ICON.clock}<span><b>${store.S.profile.problemsPerDay > 0 ? "Adjust problems & days" : "Adjust hours & days"}</b><small>Same problems, new schedule</small></span></button>
       ${lo ? `<button data-act="replan">${ICON.next}<span><b>Re-plan from today</b><small>Move ${lo} leftover${lo === 1 ? "" : "s"} forward</small></span></button>` : ""}
       <hr>
       <button data-act="plan-new">${ICON.spark}<span><b>Start a new plan</b><small>Solved history stays</small></span></button>
@@ -179,7 +179,7 @@ function tabPlan() {
   const next7 = P.days().filter((d) => d.date >= todayKey()).slice(0, 7);
   return `<div class="plancard">
       <div class="pc-top"><span class="chip">${esc(srcName())}</span>
-        <span class="row"><button class="btn sm" data-act="plan-hours">Adjust hours</button><button class="btn primary sm" data-act="change-plan">Edit plan</button></span></div>
+        <span class="row"><button class="btn sm" data-act="plan-hours">${store.S.profile.problemsPerDay > 0 ? "Adjust problems" : "Adjust hours"}</button><button class="btn primary sm" data-act="change-plan">Edit plan</button></span></div>
       <div class="pc-grid">
         <div><b>${st.finish ? pretty(st.finish) : "-"}</b><span>finish date</span></div>
         <div><b>${p.hoursPerDay} h</b><span>per day</span></div>
@@ -249,7 +249,7 @@ function tabSettings(ctx) {
     <h3 class="sub">Plan</h3>
     <div class="setbtns">
       <button class="btn sm" data-act="change-plan">Edit companies & patterns</button>
-      <button class="btn sm" data-act="plan-hours">Adjust hours & days</button>
+      <button class="btn sm" data-act="plan-hours">${store.S.profile.problemsPerDay > 0 ? "Adjust problems & days" : "Adjust hours & days"}</button>
       <button class="btn sm" data-act="plan-new">Start a new plan</button>
       <button class="btn sm" data-act="plan-reset">Reset this plan's progress</button>
     </div>

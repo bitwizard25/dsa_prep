@@ -15,10 +15,17 @@ test('deadline planning skips weekends and reports impossible dates', () => {
   assert.equal(hoursNeeded([{ d: 'M' }], '2026-11-02', '2026-10-30', 7), null);
 });
 
-test('count-based schedules reject fractional problem counts', () => {
-  assert.throws(() => schedule([{ d: 'E' }, { d: 'H' }], {
-    hoursPerDay: 1, daysPerWeek: 7, startDate: '2026-10-29', problemsPerDay: 0.5,
-  }), /problemsPerDay/);
+test('a bad problem count does not throw or drop problems', () => {
+  const queue = [{ d: 'E' }, { d: 'H' }];
+  for (const problemsPerDay of [0.5, -3, NaN, Infinity, 'nope']) {
+    const days = schedule(queue, { hoursPerDay: 1, daysPerWeek: 7, startDate: '2026-10-29', problemsPerDay });
+    assert.ok(days.length >= 1, String(problemsPerDay));
+    assert.deepEqual(days.flatMap((d) => d.items), queue);
+  }
+  const floored = schedule([{ d: 'M' }, { d: 'M' }, { d: 'M' }], {
+    hoursPerDay: 1, daysPerWeek: 7, startDate: '2026-10-29', problemsPerDay: 2.9,
+  });
+  assert.deepEqual(floored.map((d) => d.items.length), [2, 1]);
 });
 
 test('the schedule cache key includes the whole queue and the settings', () => {

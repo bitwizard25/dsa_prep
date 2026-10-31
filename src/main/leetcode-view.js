@@ -156,6 +156,16 @@ class LeetCodeView {
     finally { clearTimeout(timer); }
   }
 
+  /**
+   * After a redo unlock, ask LeetCode to restore starter code.
+   * Returns false when the reset control is not on the page.
+   */
+  async resetStarter() {
+    if (!isLeetCode(this.url())) return false;
+    try { return await this.wc.executeJavaScript(resetStarterScript()); }
+    catch { return false; }
+  }
+
   setCover(on) {
     this.coverOn = !!on;
     if (isLeetCode(this.url())) this.wc.executeJavaScript(coverScript(this.coverOn)).catch(() => {});
@@ -220,4 +230,28 @@ class LeetCodeView {
   }
 }
 
-module.exports = { LeetCodeView, isLeetCode, HOME, coverScript, exactAccepted, trackSubmission, WATCH };
+/** Pick LeetCode's reset control from a list of buttons. Null when it is not there. */
+function findResetControl(buttons) {
+  const list = buttons || [];
+  return list.find((b) => {
+    const text = String(b.text || "").trim();
+    const label = String(b.label || "");
+    return /^(reset|reset code)$/i.test(text) || (/reset/i.test(label) && /code/i.test(label));
+  }) || null;
+}
+
+function resetStarterScript() {
+  return `(() => {
+    const buttons = [...document.querySelectorAll("button")].map((el) => ({ el, text: el.innerText || "", label: el.getAttribute("aria-label") || "" }));
+    const reset = buttons.find((b) => /^(reset|reset code)$/i.test(b.text.trim()) || (/reset/i.test(b.label) && /code/i.test(b.label)));
+    if (!reset) return false;
+    reset.el.click();
+    setTimeout(() => {
+      const confirm = [...document.querySelectorAll("button")].find((el) => /^(confirm|reset|yes)$/i.test((el.innerText || "").trim()) && el !== reset.el);
+      if (confirm) confirm.click();
+    }, 250);
+    return true;
+  })()`;
+}
+
+module.exports = { LeetCodeView, isLeetCode, HOME, coverScript, exactAccepted, trackSubmission, WATCH, findResetControl, resetStarterScript };

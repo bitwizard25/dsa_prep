@@ -1,7 +1,7 @@
 // Today: what now, why, what's next, and am I on track. Plus the session view it opens.
 import { useEffect, useState } from "preact/hooks";
 import { SUBJECT, ROLES, COMPANIES } from "../core/catalog";
-import { clock, parse, todayKey, istParts, priorityOf, daysBetween, buildPlan, dsaMinutesFor, MIN_PER_PROBLEM, MIN_OTHERS, type Plan } from "../core/planner";
+import { clock, parse, todayKey, priorityOf, daysBetween, buildPlan, dsaMinutesFor, MIN_PER_PROBLEM, MIN_OTHERS, type Plan } from "../core/planner";
 import { dsaSetupFor } from "../core/dsa-setup";
 import { SUBJECTS } from "../core/catalog";
 import { today, recommend, sessionLabel, subjectReadiness, overallReadiness, pace, currentTopic, mustDo, type TodayItem } from "../core/progress";
@@ -15,7 +15,7 @@ import { startHere, fitNote } from "../core/resources";
 
 export interface Ctx { hub: HubState; plan: Plan; dsa?: DsaSummary; go: (r: string, arg?: any) => void }
 
-const greeting = () => { const h = istParts().hour; return h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening"; };
+const greeting = () => { const h = new Date().getHours(); return h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening"; };
 
 export function goalName(plan: Plan) {
   const r = ROLES.find((x) => x.id === plan.goal.role)?.name, c = COMPANIES.find((x) => x.id === plan.goal.company);

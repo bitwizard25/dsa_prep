@@ -36,6 +36,7 @@ function registerIpc(appWin) {
   h("lc:url", () => lc.url());
   h("lc:meta", (slug) => lc.problemMeta(V.slugPayload(slug)));
   h("lc:cover", (on) => lc.setCover(!!on));
+  h("lc:reset", () => (lc.resetStarter ? lc.resetStarter() : false));
   h("focus:set", (on) => lc.setFocus(on));
 
   // login

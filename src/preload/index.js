@@ -5,7 +5,7 @@ const inv = (ch) => (arg) => ipcRenderer.invoke(ch, arg);
 const on = (ch) => (cb) => ipcRenderer.on(ch, (_e, data) => cb(data));
 
 const HUB_KEYS = ["hubLoad", "hubSave", "loadState", "openPractice", "setReminders", "setTray", "onReminder", "onHubFocus", "onHubRoute", "onRemindersRefresh"];
-const PRACTICE_KEYS = ["loadState", "saveState", "layout", "drag", "open", "home", "back", "url", "problemMeta", "cover", "setFocus", "authStatus", "loginBrowser", "loginContinue", "logout", "onUrl", "onBlocked", "onShortcut", "onAuthProgress", "onNeedLogin", "hubLoad", "hubSave", "openHub", "onAccepted", "focusWindow"];
+const PRACTICE_KEYS = ["loadState", "saveState", "layout", "drag", "open", "home", "back", "url", "problemMeta", "cover", "resetCode", "setFocus", "authStatus", "loginBrowser", "loginContinue", "logout", "onUrl", "onBlocked", "onShortcut", "onAuthProgress", "onNeedLogin", "hubLoad", "hubSave", "openHub", "onAccepted", "focusWindow"];
 
 function keysFor(href) {
   const s = String(href || "");
@@ -25,6 +25,7 @@ const ALL = {
   url: inv("lc:url"),
   problemMeta: inv("lc:meta"),
   cover: inv("lc:cover"),
+  resetCode: inv("lc:reset"),
   setFocus: inv("focus:set"),
   authStatus: inv("auth:status"),
   loginBrowser: inv("auth:browser"),

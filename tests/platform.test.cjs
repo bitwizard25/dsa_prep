@@ -57,14 +57,14 @@ test("atomic rename retries EPERM and EBUSY, and fails fast on other errors", ()
   assert.equal(fs.readFileSync(path.join(dir, "to.txt"), "utf8"), "ok");
 });
 
-test("reminders roll to the next Asia/Kolkata midnight", () => {
-  const { nextIstMidnight } = load(path.resolve("src/main/reminders.js"), {
+test("reminders roll to the next local midnight", () => {
+  const { nextLocalMidnight } = load(path.resolve("src/main/reminders.js"), {
     electron: { Notification: class {}, powerMonitor: { on() {} } },
   });
-  const evening = Date.parse("2026-10-29T18:00:00Z");
-  assert.equal(new Date(nextIstMidnight(evening)).toISOString(), "2026-10-29T18:30:00.000Z");
-  const justAfter = Date.parse("2026-10-29T18:30:00Z");
-  assert.equal(nextIstMidnight(justAfter) - justAfter, 24 * 60 * 60 * 1000);
+  const evening = new Date(2026, 9, 29, 23, 0, 0).getTime();
+  assert.equal(nextLocalMidnight(evening), new Date(2026, 9, 30, 0, 0, 0).getTime());
+  const midnight = new Date(2026, 9, 30, 0, 0, 0).getTime();
+  assert.equal(nextLocalMidnight(midnight), new Date(2026, 9, 31, 0, 0, 0).getTime());
 });
 
 test("IPC rejects unexpected state fields and bad problem slugs", () => {
@@ -83,6 +83,15 @@ test("IPC rejects unexpected state fields and bad problem slugs", () => {
   assert.throws(() => handlers.get("state:save")(event, { stolen: true }), /unexpected/i);
   assert.throws(() => handlers.get("lc:open")(event, "../evil"), /problem/i);
   assert.equal(handlers.get("state:save")(event, { version: 2 }), true);
+});
+
+test("redo reset uses LeetCode's reset control and fails closed when it is missing", () => {
+  const { findResetControl, resetStarterScript } = load(path.resolve("src/main/leetcode-view.js"), { electron: {} });
+  assert.equal(findResetControl([{ text: "Run", label: "" }, { text: "Reset", label: "" }]).text, "Reset");
+  assert.equal(findResetControl([{ text: "Submit", label: "Reset code" }]).label, "Reset code");
+  assert.equal(findResetControl([{ text: "Not Accepted", label: "" }]), null);
+  assert.equal(findResetControl([]), null);
+  assert.match(resetStarterScript(), /return false/);
 });
 
 test("the editor cover says it is only a reminder", () => {

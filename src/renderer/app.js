@@ -86,6 +86,7 @@ function commitPlan(d) {
   store.S.profile = {
     onboarded: true, dataVersion: 2, source: d.sources[0], sources: d.sources, custom, patterns: d.patterns, perPattern: d.perPattern, premium: d.premium,
     hoursPerDay: d.hoursPerDay, daysPerWeek: +d.daysPerWeek, startDate: d.startDate,
+    problemsPerDay: Number.isFinite(+d.problemsPerDay) && +d.problemsPerDay > 0 ? Math.floor(+d.problemsPerDay) : 0,
     queue: q.map((p) => p.slug), completed, planMode: d.planMode, targetDate: d.targetDate,
   };
   store.saveNow();
@@ -209,7 +210,6 @@ function beginAttempt(slug) {
   ctx.attempt = attempt;
   const locked = attempt.gate && !attempt.unlocked;
   if (locked && store.S.ui.collapsed) { store.S.ui.collapsed = false; store.save(); applyLayout(); }
-  if (locked && store.S.timer?.running && store.S.timer.mode === "work") T.toggle();
   syncCover();
   if (locked && !attempt.facts) loadFacts(attempt);
 }
@@ -225,8 +225,11 @@ async function loadFacts(attempt) {
   render();
 }
 function unlock() {
-  const a = ctx.attempt; a.unlocked = true; a.unlockedAt = Date.now(); a.nudge = "";
+  const a = ctx.attempt;
+  const redo = P.redoDue().some((p) => p.slug === a.slug);
+  a.unlocked = true; a.unlockedAt = Date.now(); a.nudge = "";
   syncCover();
+  if (redo) api.resetCode?.().catch(() => {});
   // A break stays a break. Starting focus here would hide the redo insight behind the timer.
   if (!store.S.timer.running && store.S.timer.mode !== "break") T.toggle();
   persistOpen(true);
@@ -298,7 +301,8 @@ const actions = {
       if (v === "date") d.hoursManual = d.hoursPerDay;              // remember the user's own hours
       else if (d.hoursManual) d.hoursPerDay = d.hoursManual;        // and restore them when switching back
     }
-    d[k] = k === "daysPerWeek" ? +v : v;
+    d[k] = k === "daysPerWeek" || k === "problemsPerDay" ? +v : v;
+    if (k === "problemsPerDay") d.hoursPerDay = Math.max(0.5, Math.round((+v * 39 / 60) * 2) / 2);
     render();
   },
   finish: finishOnboarding,
@@ -318,7 +322,7 @@ const actions = {
     if (!a.facts) { a.nudge = "Checking problem details. You can also skip this step."; render(); return; }
     const { problems, patternRight, warning, unverifiable } = R.checkThink(a.think, a.facts);
     if (problems.length) { a.nudge = problems[0]; render(); return; }
-    a.think.complexityWarning = warning || "";
+    a.think.complexityWarning = warning || "";   // advisory only: a slow guess does not keep the editor locked
     if (unverifiable) { a.think.unverifiable = true; a.think.patternTries = 1; a.think.patternCorrect = false; unlock(); return; }
     a.think.patternTries++; a.think.patternCorrect = patternRight === true;
     if (patternRight === false && a.think.patternTries < 2) { a.nudge = "That pattern may not fit. Re-read the constraints and your brute force."; render(); return; }

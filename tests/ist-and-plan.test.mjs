@@ -4,10 +4,10 @@ import { todayKey, instantKey, isValidDay } from "../src/renderer/core/dates.js"
 import { schedule } from "../src/renderer/core/plan.js";
 import { build } from "../hub-src/node_modules/esbuild/lib/main.js";
 
-test("today follows Asia/Kolkata, including an ISO timestamp", () => {
-  assert.equal(todayKey(new Date("2026-10-29T18:29:00Z")), "2026-10-29");
-  assert.equal(todayKey(new Date("2026-10-29T18:30:00Z")), "2026-10-30");
-  assert.equal(instantKey("2026-10-29T18:30:00.000Z"), "2026-10-30");
+test("today follows the computer's local calendar", () => {
+  assert.equal(todayKey(new Date(2026, 9, 29, 23, 30, 0)), "2026-10-29");
+  assert.equal(todayKey(new Date(2026, 9, 30, 0, 5, 0)), "2026-10-30");
+  assert.equal(instantKey(new Date(2026, 9, 29, 23, 30, 0)), "2026-10-29");
   assert.equal(instantKey("2026-10-29"), "2026-10-29");
   assert.equal(isValidDay("2026-02-31"), false);
   assert.equal(isValidDay("2026-10-29"), true);
@@ -41,8 +41,8 @@ test("buildPlan survives zero or one subject and an invalid start date", async (
   const one = buildPlan(goal({ skip: ["oops", "os", "dbms", "cn", "lld", "sd"] }));
   assert.equal(one.subjects.length, 1);
   assert.match(one.why.join(" "), /DSA/);
-  assert.equal(hubToday(new Date("2026-10-29T18:30:00Z")), "2026-10-30");
-  assert.equal(hubInstant("2026-10-29T20:00:00Z"), "2026-10-30");
+  assert.equal(hubToday(new Date(2026, 9, 29, 23, 30, 0)), "2026-10-29");
+  assert.equal(hubInstant(new Date(2026, 9, 30, 0, 5, 0)), "2026-10-30");
 });
 
 test("must-do uses that day's leftovers, and manual solves are not solo today", async () => {
@@ -85,4 +85,16 @@ test("must-do uses that day's leftovers, and manual solves are not solo today", 
   assert.equal(practiceLocked(hubState, plan), true);
   setDsaTruth({ ...summary, hasPlan: true, leftovers: 0, leftByDate: {}, todayTotal: 1, todayLeft: 1 });
   assert.equal(practiceLocked(hubState, plan), false);
+});
+
+test("a weak quiz comes back as a revision once its day arrives", async () => {
+  const { dueRevisions } = await bundle("hub-src/src/core/progress.ts");
+  const now = new Date(2026, 9, 29, 12, 0, 0);
+  const due = dueRevisions({ progress: { revision: { "oops-classes": { due: "2026-10-29", topicId: "oops-classes" } } } }, now);
+  assert.equal(due.length, 1);
+  assert.equal(due[0].id, "rev#oops-classes");
+  assert.equal(due[0].subject, "oops");
+  assert.equal(due[0].minutes, 20);
+  const waiting = dueRevisions({ progress: { revision: { "oops-classes": { due: "2999-01-01", topicId: "oops-classes" } } } }, now);
+  assert.equal(waiting.length, 0);
 });

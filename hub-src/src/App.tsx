@@ -1,6 +1,6 @@
 // The Hub shell: left rail, header with the goal, and the screens.
 import { useEffect, useMemo, useState } from "preact/hooks";
-import { buildPlan, todayKey, timetable, clock, parse, istMidnightMs } from "./core/planner";
+import { buildPlan, todayKey, timetable, clock, parse, localMidnightMs } from "./core/planner";
 import { SUBJECT } from "./core/catalog";
 import { summarizeDsa, type DsaSummary } from "./core/practice-bridge";
 import { dsaSetupFor } from "./core/dsa-setup";
@@ -39,7 +39,7 @@ export function App() {
   useEffect(() => {
     if (!plan) return;
     const items = today(hub, plan);
-    const base = istMidnightMs();
+    const base = localMidnightMs();
     const list: ReminderItem[] = !hub.settings.reminders ? [] : items.filter((i) => i.state === "upcoming" || i.state === "current").map((i, k, arr) => ({
       id: i.id, title: SUBJECT[i.subject].short, topic: sessionLabel(hub, plan, i, dsa),
       start: base + i.startMin * 60000, end: base + i.endMin * 60000,
