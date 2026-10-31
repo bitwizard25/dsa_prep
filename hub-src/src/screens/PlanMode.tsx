@@ -3,6 +3,7 @@ import { useMemo, useState } from "preact/hooks";
 import { ROLES, COMPANIES, LEVELS, SUBJECTS, SUBJECT, type SubjectId } from "../core/catalog";
 import { buildPlan, fmt, addDays, todayKey, parse, type Goal, priorityOf, dsaMinutesFor, MIN_PER_PROBLEM, MIN_OTHERS } from "../core/planner";
 import { Button, Icon, Steps, Bar, hm, howOften } from "../ui/kit";
+import { silkBackdrop, welcomeSilk } from "../ui/silk";
 
 const DURATIONS = [["30 days", 30], ["60 days", 60], ["90 days", 90], ["6 months", 182]] as const;
 const HOURS = [2, 4, 6, 8];
@@ -84,8 +85,9 @@ export function PlanMode({ initial, onDone, onCancel }: { initial: Goal | null; 
   }
 
   const q = questions[step];
+  const welcome = step === 0;
   return (
-    <div class="planmode center"><div class="pm-card">
+    <div class={`planmode center${welcome ? " welcome" : ""}`} style={welcome ? { backgroundImage: silkBackdrop(welcomeSilk()) } : undefined}><div class="pm-card">
       <div class="pm-top">
         <span class="stepno">Step {step + 1} of {N}</span>
         <div class="dots" aria-hidden="true">{questions.map((_, i) => <i class={i <= step ? "on" : ""} />)}</div>

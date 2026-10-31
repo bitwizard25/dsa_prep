@@ -9,11 +9,6 @@ import * as Onb from "./screens/onboarding.js";
 import * as Ws from "./screens/workspace.js";
 import { parseImport, patternCounts, PATTERNS } from "./core/problems.js";
 import { fmt, addDays, todayKey } from "./core/dates.js";
-import { silkUrl } from "./ui/silk.js";
-
-// Silk textures, generated once.
-document.documentElement.style.setProperty("--silk-hero", silkUrl({ seed: 4, ribbons: 3 }));
-document.documentElement.style.setProperty("--silk-card", silkUrl({ seed: 9, ribbons: 2, sheen: 0.7 }));
 
 const api = window.api;
 const $app = document.getElementById("app");

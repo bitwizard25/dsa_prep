@@ -9,6 +9,7 @@ import type { DsaSummary } from "../core/practice-bridge";
 import { update, getState, saveNow, type HubState } from "../store";
 import { api } from "../api";
 import { Button, Icon, Bar, Section, pct, score, hm, toast } from "../ui/kit";
+import { milestoneSilk, silkBackdrop } from "../ui/silk";
 import { TopicResources } from "../ui/Resources";
 import { Quiz, hasQuiz } from "../ui/Quiz";
 import { startHere, fitNote } from "../core/resources";
@@ -85,7 +86,8 @@ export function TodayScreen(ctx: Ctx) {
         </Section>
         <Section title="Roadmap" action={<button class="linkbtn" onClick={() => ctx.go("roadmap")}>Open</button>}>
           <div class="road"><Bar value={elapsed} label="Time through the plan" /><span>{dayIndex >= 0 ? `Day ${dayIndex + 1} of ${plan.studyDays}` : "Plan complete"}</span></div>
-          {nextMs && <div class="milestone"><span class="eyebrow">Next milestone</span><b>{nextMs.name}</b><span>{Math.max(0, daysBetween(t, nextMs.date))} days remaining</span></div>}
+          {plan.milestones.filter((m) => m.date === t).map((m) => <div class="milestone moment" key={m.id} style={{ backgroundImage: silkBackdrop(milestoneSilk()) }}><span class="eyebrow">Milestone reached</span><b>{m.name}</b><span>Today</span></div>)}
+          {nextMs && nextMs.date !== t && <div class="milestone"><span class="eyebrow">Next milestone</span><b>{nextMs.name}</b><span>{Math.max(0, daysBetween(t, nextMs.date))} days remaining</span></div>}
           <p class="fine">Overall readiness, estimated: <b>{score(overallReadiness(hub, plan, dsa))}</b></p>
         </Section>
       </div>
