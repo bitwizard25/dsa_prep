@@ -15,6 +15,7 @@ Requires Node.js 22.12 or newer and npm. Install both the desktop and Hub depend
     npm run build:hub     # rebuild after editing hub-src/
     npm start             # run from source
     npm run dist:win      # Windows installer (build on Windows, or Linux with Wine)
+    # A version tag vX.Y.Z publishes that installer. See docs/RELEASING.md.
     npm run dist:linux    # Linux AppImage
 
 ## Checks

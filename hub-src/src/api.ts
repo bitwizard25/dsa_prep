@@ -11,6 +11,10 @@ interface Api {
   onHubFocus(cb: () => void): void;
   onHubRoute(cb: (route: string) => void): void;
   onRemindersRefresh(cb: () => void): void;
+  setSessionBusy(on: boolean): Promise<boolean>;
+  updateStatus(): Promise<{ ready: boolean; version: string }>;
+  installUpdate(): Promise<{ ok: boolean; reason?: string }>;
+  onUpdateReady(cb: (info: { version: string }) => void): void;
 }
 declare global { interface Window { api: Api } }
 export const api = window.api;
