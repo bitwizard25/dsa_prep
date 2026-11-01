@@ -57,13 +57,24 @@ async function listReleases(fetchImpl, token, owner, repo) {
 }
 
 async function downloadAsset(fetchImpl, token, asset) {
-  const first = await github(fetchImpl, token, asset.url, {
-    headers: { Accept: "application/octet-stream" },
+  // The asset API either redirects to the file or returns the bytes directly.
+  const res = await fetchImpl(asset.url, {
+    redirect: "manual",
+    headers: {
+      Accept: "application/octet-stream",
+      Authorization: `Bearer ${token}`,
+      "User-Agent": "dsa-prep-release",
+      "X-GitHub-Api-Version": "2022-11-28",
+    },
   });
-  if (!first.redirect) throw new Error(`GitHub did not redirect for ${asset.name}`);
-  const bin = await fetchImpl(first.redirect);
-  if (!bin.ok) throw new Error(`Download of ${asset.name} failed (${bin.status})`);
-  return Buffer.from(await bin.arrayBuffer());
+  const location = res.headers.get("location");
+  if ((res.status === 301 || res.status === 302 || res.status === 307) && location) {
+    const bin = await fetchImpl(location);
+    if (!bin.ok) throw new Error(`Download of ${asset.name} failed (${bin.status})`);
+    return Buffer.from(await bin.arrayBuffer());
+  }
+  if (!res.ok) throw new Error(`Download of ${asset.name} failed (${res.status})`);
+  return Buffer.from(await res.arrayBuffer());
 }
 
 async function uploadAsset(fetchImpl, token, release, name, data) {
