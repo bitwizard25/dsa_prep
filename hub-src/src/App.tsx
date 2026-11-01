@@ -6,7 +6,7 @@ import { summarizeDsa, type DsaSummary } from "./core/practice-bridge";
 import { dsaSetupFor } from "./core/dsa-setup";
 import { today, sessionLabel, setDsaTruth, practiceLocked } from "./core/progress";
 import { useHub, update, emptyState, getState, saveNow } from "./store";
-import { api, type ReminderItem } from "./api";
+import { api, type ReminderItem, type UpdateStatus } from "./api";
 import { Icon, Toasts, toast, Empty, Button } from "./ui/kit";
 import { PlanMode } from "./screens/PlanMode";
 import { TodayScreen, SessionScreen, CompleteScreen, goalName, startSession } from "./screens/Today";
@@ -18,9 +18,10 @@ const START = (location.hash.slice(1) || "today").split("?")[0];
 export function App() {
   const hub = useHub();
   const [route, setRoute] = useState<{ name: string; arg?: any }>({ name: START });
-  const [planMode, setPlanMode] = useState(false);
+  const [planMode, setPlanMode] = useState(START === "plan");
   const [dsa, setDsa] = useState<DsaSummary | undefined>();
   const [reminderTick, setReminderTick] = useState(0);
+  const [about, setAbout] = useState<UpdateStatus | null>(null);
   const plan = useMemo(() => (hub.goal ? buildPlan(hub.goal) : null), [hub.goal]);
   const go = (name: string, arg?: any) => {
     if (name === "practice") {
@@ -33,7 +34,28 @@ export function App() {
 
   // DSA progress comes from the practice app's own data; refresh whenever the Hub comes back into view.
   const refreshDsa = () => api.loadState().then((raw) => { const d = summarizeDsa(raw, todayKey()); setDsaTruth(d); setDsa(d); });
-  useEffect(() => { refreshDsa(); api.onHubFocus(refreshDsa); api.onHubRoute((r) => { setPlanMode(false); go(r); }); api.onRemindersRefresh?.(() => setReminderTick((n) => n + 1)); }, []);
+  useEffect(() => { refreshDsa(); api.onHubFocus(refreshDsa); api.onHubRoute((r) => { if (r === "plan") { setPlanMode(true); return; } setPlanMode(false); go(r); }); api.onRemindersRefresh?.(() => setReminderTick((n) => n + 1)); }, []);
+
+  // A downloaded update may restart only when this page is not in the middle of a session.
+  useEffect(() => { api.setSessionBusy(route.name === "session" || route.name === "quiz"); }, [route.name]);
+  useEffect(() => {
+    let shown = false;
+    const show = () => {
+      if (shown) return;
+      shown = true;
+      toast({
+        title: "Update ready", body: "Restart now?", sticky: true,
+        action: { label: "Restart now", run: () => { saveNow().then(() => api.installUpdate()).then((r) => { if (r && r.ok === false && r.reason === "busy") { shown = false; toast({ title: "Update ready", body: "It will install after this session.", sticky: true }); } }); } },
+      });
+    };
+    api.updateStatus().then((s) => { if (s && s.ready) show(); }).catch(() => {});
+    api.onUpdateReady(() => show());
+  }, []);
+  useEffect(() => {
+    api.updateStatus().then(setAbout).catch(() => {});
+    api.onUpdateStatus((s) => setAbout(s));
+  }, []);
+  useEffect(() => { document.title = about?.appVersion ? `DSA Practice ${about.appVersion}` : "Prep Hub"; }, [about?.appVersion]);
 
   // Reminders: hand today's remaining sessions to the main process, which shows system notifications.
   useEffect(() => {
@@ -57,6 +79,7 @@ export function App() {
 
   if (!hub.goal || planMode) {
     return <><PlanMode initial={hub.goal} onCancel={hub.goal ? () => setPlanMode(false) : undefined}
+      versionMark={about?.appVersion ? `v${about.appVersion}` : ""} versionTitle={about?.buildLabel || "Development build"}
       onDone={(g) => { update((s) => { s.goal = g; s.createdAt ||= new Date().toISOString(); s.dsaSetup = dsaSetupFor(g, buildPlan(g)); }); setPlanMode(false); go("today"); toast({ title: "Your plan is ready", body: "Today shows what to do first." }); }} /><Toasts /></>;
   }
   if (!plan) return null;
@@ -66,7 +89,7 @@ export function App() {
       case "roadmap": return <RoadmapScreen {...ctx} />;
       case "subjects": return <SubjectsScreen {...ctx} />;
       case "progress": return <ProgressScreen {...ctx} />;
-      case "settings": return <SettingsScreen ctx={ctx} onEditPlan={() => setPlanMode(true)} onReset={() => { update((s) => Object.assign(s, emptyState())); go("today"); }} />;
+      case "settings": return <SettingsScreen ctx={ctx} about={about} onCheck={async () => { await api.checkForUpdates(); setAbout(await api.updateStatus()); }} onEditPlan={() => setPlanMode(true)} onReset={() => { update((s) => Object.assign(s, emptyState())); go("today"); }} />;
       case "session": return <SessionScreen ctx={ctx} id={route.arg} />;
       case "quiz": return <QuizScreen ctx={ctx} topicId={route.arg} />;
       case "complete": return <CompleteScreen ctx={ctx} id={route.arg} />;
@@ -81,6 +104,7 @@ export function App() {
       <nav class="tn-tabs" aria-label="Main">{NAV.map(([id, label]) => <button class={active === id ? "on" : ""} aria-current={active === id ? "page" : undefined} onClick={() => go(id)}>{label}</button>)}</nav>
       <span class="grow" />
       <button class="goal" onClick={() => setPlanMode(true)} title="Edit your goal and plan">{goalName(plan)}<small>ready by {parse(plan.goal.targetDate).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</small></button>
+      {about?.appVersion && <span class="tn-ver" title={about.buildLabel}>v{about.appVersion}</span>}
       <button class={`tn-icon ${active === "settings" ? "on" : ""}`} aria-label="Settings" title="Settings" onClick={() => go("settings")}><Icon.settings /></button>
     </header>
     <main>{screen}</main>

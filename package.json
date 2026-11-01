@@ -1,21 +1,26 @@
 {
   "name": "dsa-practice",
-  "version": "2.3.0",
+  "version": "2.4.0",
   "description": "Personal LeetCode practice app: company-based plans, focus timer, streaks, all saved locally",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bitwizard25/dsa_prep.git"
+  },
   "main": "src/main/index.js",
   "scripts": {
     "test": "node --test tests/*.test.*",
     "check": "npm test && npm --prefix hub-src run check",
     "smoke": "electron tools/smoke-electron.cjs",
     "start": "electron .",
-    "dist:win": "electron-builder --win nsis --x64",
-    "dist:linux": "electron-builder --linux AppImage",
+    "dist:win": "node tools/write-build-info.js && electron-builder --win nsis --x64",
+    "dist:linux": "node tools/write-build-info.js && electron-builder --linux AppImage",
     "build:hub": "cd hub-src && npm run build"
   },
   "engines": {
     "node": ">=22.12.0"
   },
   "dependencies": {
+    "electron-updater": "^6.8.11",
     "ws": "^8.18.0"
   },
   "devDependencies": {
@@ -45,7 +50,9 @@
       "installerHeader": "build-assets/installerHeader.bmp",
       "installerSidebar": "build-assets/installerSidebar.bmp",
       "uninstallerSidebar": "build-assets/installerSidebar.bmp",
-      "artifactName": "dsa_prep_setup_${version}.${ext}"
+      "artifactName": "dsa_prep_setup_${version}.${ext}",
+      "deleteAppDataOnUninstall": false,
+      "differentialPackage": "store-asar"
     },
     "linux": {
       "target": "AppImage",
@@ -55,6 +62,11 @@
       "buildResources": "build-assets",
       "output": "dist"
     },
-    "executableName": "dsa_prep"
+    "executableName": "dsa_prep",
+    "publish": {
+      "provider": "github",
+      "owner": "bitwizard25",
+      "repo": "dsa_prep"
+    }
   }
 }

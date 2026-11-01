@@ -59,15 +59,21 @@ export function Steps({ steps, onDone, ms = 380 }: { steps: string[]; onDone: ()
 }
 
 // ---------- toasts ----------
-type Toast = { id: number; title: string; body?: string; action?: { label: string; run: () => void } };
+type Toast = { id: number; title: string; body?: string; sticky?: boolean; action?: { label: string; run: () => void } };
 let push: (t: Omit<Toast, "id">) => void = () => {};
 export const toast = (t: Omit<Toast, "id">) => push(t);
 export function Toasts() {
   const [items, setItems] = useState<Toast[]>([]);
   push = (t) => {
     const id = Date.now() + Math.random();
-    setItems((x) => [...x.slice(-2), { ...t, id }]);
-    setTimeout(() => setItems((x) => x.filter((i) => i.id !== id)), 9000);
+    const item = { ...t, id };
+    setItems((x) => {
+      const next = [...(t.sticky ? x.filter((i) => !i.sticky) : x), item];
+      const sticky = next.filter((i) => i.sticky).slice(-1);
+      const normal = next.filter((i) => !i.sticky).slice(-2);
+      return [...normal, ...sticky];
+    });
+    if (!t.sticky) setTimeout(() => setItems((x) => x.filter((i) => i.id !== id)), 9000);
   };
   return <div class="toasts" role="status" aria-live="polite">{items.map((t) => (
     <div class="toast" key={t.id}>

@@ -8,7 +8,7 @@ const login = require("./browser-login");
 const { Reminders } = require("./reminders");
 const { TrayControl } = require("./tray");
 
-function registerIpc(appWin) {
+function registerIpc(appWin, updater, bridge) {
   const lc = appWin.lc;
   const pages = new Set(["hub", "renderer"].map(dir =>
     pathToFileURL(path.join(__dirname, "..", dir, "index.html")).href));
@@ -60,8 +60,13 @@ function registerIpc(appWin) {
 
   // ---------- Hub (added; nothing above changes) ----------
   const reminders = new Reminders(appWin);
-  const tray = new TrayControl(appWin);
+  const tray = new TrayControl(appWin, () => updater && updater.requestRestart());
+  if (bridge) bridge.tray = tray;
   tray.set(!!((store.read("hub.json") || {}).settings || {}).tray);
+  h("session:busy", (on) => { if (updater) updater.setBusy(V.boolPayload(on)); return true; });
+  h("update:status", () => (updater ? updater.status() : { ready: false, version: "", phase: "dev", percent: null, available: "", lastCheckedAt: null, detail: "", label: "Not checked in a development build", appVersion: "", commit: null, builtAt: null, buildLabel: "Development build" }));
+  h("update:check", () => (updater ? updater.check(Date.now(), { force: true }) : { checked: false, reason: "dev" }));
+  h("update:install", () => (updater ? updater.requestRestart() : { ok: false, reason: "none" }));
   h("hub:load", () => store.read("hub.json"));
   h("hub:save", (s) => { store.write("hub.json", V.hubPayload(s)); return true; });
   h("view:open", (v) => { const o = V.viewPayload(v); return appWin.openView(o.view, o.route); });

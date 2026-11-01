@@ -1,0 +1,32 @@
+# Publishes a Windows installer when a version tag is pushed. Uses the job's
+# GITHUB_TOKEN only. electron-builder uploads the NSIS exe, latest.yml, and the
+# blockmap so later updates can download just the changed bytes.
+name: Release
+"on":
+  push:
+    tags:
+      - "v*"
+permissions:
+  contents: write
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            hub-src/package-lock.json
+      - run: npm ci
+      - run: npm ci --prefix hub-src
+      - run: npm run build:hub
+      - name: Stamp the build
+        run: node tools/write-build-info.js
+      - name: Build and publish the NSIS installer
+        run: npx electron-builder --win nsis --x64 --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: false

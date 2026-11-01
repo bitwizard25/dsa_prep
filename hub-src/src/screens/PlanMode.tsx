@@ -3,6 +3,7 @@ import { useMemo, useState } from "preact/hooks";
 import { ROLES, COMPANIES, LEVELS, SUBJECTS, SUBJECT, type SubjectId } from "../core/catalog";
 import { buildPlan, fmt, addDays, todayKey, parse, type Goal, priorityOf, dsaMinutesFor, MIN_PER_PROBLEM, MIN_OTHERS } from "../core/planner";
 import { Button, Icon, Steps, Bar, hm, howOften } from "../ui/kit";
+import { silkBackdrop, welcomeSilk } from "../ui/silk";
 
 const DURATIONS = [["30 days", 30], ["60 days", 60], ["90 days", 90], ["6 months", 182]] as const;
 const HOURS = [2, 4, 6, 8];
@@ -12,7 +13,7 @@ export function defaultGoal(): Goal {
     startDate: todayKey(), targetDate: fmt(addDays(new Date(), 90)), startTime: "09:00", breakMin: 15, problemsPerDay: 4 };
 }
 
-export function PlanMode({ initial, onDone, onCancel }: { initial: Goal | null; onDone: (g: Goal) => void; onCancel?: () => void }) {
+export function PlanMode({ initial, onDone, onCancel, versionMark, versionTitle }: { initial: Goal | null; onDone: (g: Goal) => void; onCancel?: () => void; versionMark?: string; versionTitle?: string }) {
   const [g, setG] = useState<Goal>(initial ? { ...initial } : defaultGoal());
   const [step, setStep] = useState(0);              // 0-3 questions, 4 building, 5 result
   const [custom, setCustom] = useState(false);
@@ -52,11 +53,12 @@ export function PlanMode({ initial, onDone, onCancel }: { initial: Goal | null; 
       <p class="hint">{days} days from today.</p></>) },
   ];
 
+  const ver = versionMark ? <p class="pm-ver" title={versionTitle}>{versionMark}</p> : null;
   if (step === N) return (
     <div class="planmode center"><div class="pm-card narrow">
       <h1 class="title">Building your preparation plan</h1>
       <Steps steps={["Reading your target role", "Weighing what the company emphasises", "Prioritising subjects and topics", "Creating your roadmap and timetable"]} onDone={() => setStep(N + 1)} />
-    </div></div>);
+    </div>{ver}</div>);
 
   if (step === N + 1 && plan) {
     const ranked = plan.subjects.slice().sort((a, b) => b.share - a.share);
@@ -80,12 +82,13 @@ export function PlanMode({ initial, onDone, onCancel }: { initial: Goal | null; 
           <Button kind="quiet" onClick={() => setStep(N - 1)}><Icon.back /> Change answers</Button>
           <Button kind="primary" size="lg" onClick={() => onDone(g)}>Start preparing <Icon.arrow /></Button>
         </div>
-      </div></div>);
+      </div>{ver}</div>);
   }
 
   const q = questions[step];
+  const welcome = step === 0;
   return (
-    <div class="planmode center"><div class="pm-card">
+    <div class={`planmode center${welcome ? " welcome" : ""}`} style={welcome ? { backgroundImage: silkBackdrop(welcomeSilk()) } : undefined}><div class="pm-card">
       <div class="pm-top">
         <span class="stepno">Step {step + 1} of {N}</span>
         <div class="dots" aria-hidden="true">{questions.map((_, i) => <i class={i <= step ? "on" : ""} />)}</div>
@@ -121,5 +124,5 @@ export function PlanMode({ initial, onDone, onCancel }: { initial: Goal | null; 
         {step < N - 1 ? <Button kind="primary" onClick={() => { if (step === 3 && overflow) { setFixShown(true); return; } setStep(step + 1); }}>Continue <Icon.arrow /></Button>
           : <Button kind="primary" size="lg" onClick={() => (overflow ? (setStep(3), setFixShown(true)) : setStep(N))}>Build my plan <Icon.arrow /></Button>}
       </div>
-    </div></div>);
+    </div>{ver}</div>);
 }
