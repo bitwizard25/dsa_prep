@@ -4,8 +4,8 @@ const { contextBridge, ipcRenderer } = require("electron");
 const inv = (ch) => (arg) => ipcRenderer.invoke(ch, arg);
 const on = (ch) => (cb) => ipcRenderer.on(ch, (_e, data) => cb(data));
 
-const HUB_KEYS = ["hubLoad", "hubSave", "loadState", "openPractice", "setReminders", "setTray", "onReminder", "onHubFocus", "onHubRoute", "onRemindersRefresh", "setSessionBusy", "updateStatus", "installUpdate", "onUpdateReady"];
-const PRACTICE_KEYS = ["loadState", "saveState", "layout", "drag", "open", "home", "back", "url", "problemMeta", "cover", "resetCode", "setFocus", "authStatus", "loginBrowser", "loginContinue", "logout", "onUrl", "onBlocked", "onShortcut", "onAuthProgress", "onNeedLogin", "hubLoad", "hubSave", "openHub", "onAccepted", "focusWindow", "setSessionBusy"];
+const HUB_KEYS = ["hubLoad", "hubSave", "loadState", "openPractice", "setReminders", "setTray", "onReminder", "onHubFocus", "onHubRoute", "onRemindersRefresh", "setSessionBusy", "updateStatus", "checkForUpdates", "installUpdate", "onUpdateReady", "onUpdateStatus"];
+const PRACTICE_KEYS = ["loadState", "saveState", "layout", "drag", "open", "home", "back", "url", "problemMeta", "cover", "resetCode", "setFocus", "authStatus", "loginBrowser", "loginContinue", "logout", "onUrl", "onBlocked", "onShortcut", "onAuthProgress", "onNeedLogin", "hubLoad", "hubSave", "openHub", "onAccepted", "focusWindow", "setSessionBusy", "updateStatus", "checkForUpdates", "installUpdate", "onUpdateStatus"];
 
 function keysFor(href) {
   const s = String(href || "");
@@ -50,8 +50,10 @@ const ALL = {
   focusWindow: inv("window:focus"),
   setSessionBusy: inv("session:busy"),
   updateStatus: inv("update:status"),
+  checkForUpdates: inv("update:check"),
   installUpdate: inv("update:install"),
   onUpdateReady: on("update-ready"),
+  onUpdateStatus: on("update-status"),
 };
 
 const href = typeof location === "undefined" ? "" : location.href;

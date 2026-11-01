@@ -28,6 +28,7 @@ function fakeUpdater() {
 function controller(extra = {}) {
   const updater = extra.updater || fakeUpdater();
   const notes = [];
+  const statuses = [];
   let flushed = 0;
   const c = createUpdateController({
     autoUpdater: updater,
@@ -36,9 +37,11 @@ function controller(extra = {}) {
     feed: { owner: "bitwizard25", repo: "dsa_prep" },
     flush: () => { flushed += 1; return Promise.resolve(); },
     onNotify: (info) => notes.push(info),
+    onStatus: (info) => statuses.push(info),
+    about: extra.about,
     everyMs: policy.CHECK_EVERY_MS,
   });
-  return { c, updater, notes, flushed: () => flushed };
+  return { c, updater, notes, statuses, flushed: () => flushed };
 }
 
 test("offline, unpackaged, and a recent check do not contact GitHub", async () => {
@@ -74,12 +77,16 @@ test("a download while a session is busy waits, then offers a silent restart", a
   assert.equal(notes[0].announce, false);
   assert.deepEqual(await c.requestRestart(), { ok: false, reason: "busy" });
   assert.equal(updater.installs.length, 0);
-  assert.deepEqual(c.status(), { ready: false, version: "2.4.0" });
+  assert.equal(c.status().ready, false);
+  assert.equal(c.status().version, "2.4.0");
+  assert.equal(c.status().label, "Update ready. It installs after this session.");
 
   c.setBusy(false);
   assert.equal(notes.at(-1).ready, true);
   assert.equal(notes.at(-1).announce, true);
-  assert.deepEqual(c.status(), { ready: true, version: "2.4.0" });
+  assert.equal(c.status().ready, true);
+  assert.equal(c.status().version, "2.4.0");
+  assert.equal(c.status().label, "Update ready, restart to install");
   assert.deepEqual(await c.requestRestart(), { ok: true });
   assert.equal(flushed(), 1);
   assert.deepEqual(updater.installs, [[true, true]]);
@@ -130,6 +137,7 @@ test("the release workflow is valid YAML and publishes with GITHUB_TOKEN only", 
   assert.equal(doc.jobs.windows["runs-on"], "windows-latest");
   assert.equal(doc.permissions.contents, "write");
   assert.match(text, /electron-builder --win nsis --x64 --publish always/);
+  assert.match(text, /node tools\/write-build-info\.js/);
   const secrets = [...text.matchAll(/secrets\.([A-Z0-9_]+)/g)].map((m) => m[1]);
   assert.deepEqual([...new Set(secrets)], ["GITHUB_TOKEN"]);
   const pkg = JSON.parse(fs.readFileSync(path.resolve("package.json"), "utf8"));
@@ -140,4 +148,60 @@ test("the release workflow is valid YAML and publishes with GITHUB_TOKEN only", 
   assert.equal(pkg.build.nsis.differentialPackage, "store-asar");
   assert.equal(pkg.build.nsis.deleteAppDataOnUninstall, false);
   assert.equal(JSON.stringify(pkg.build.publish).includes("token"), false);
+});
+
+test("a check reports up to date, and a manual check ignores the wait", async () => {
+  const { c, updater } = controller({ about: { appVersion: "2.4.0", commit: "abc1234def", builtAt: "2026-11-01T06:00:00.000Z" } });
+  assert.equal(c.status().phase, "idle");
+  assert.equal(c.status().label, "Not checked yet");
+  assert.equal(c.status().appVersion, "2.4.0");
+  assert.equal(c.status().buildLabel, "abc1234 · 1 Nov 2026");
+  assert.equal((await c.check(1_000)).checked, true);
+  assert.equal(c.status().phase, "uptodate");
+  assert.equal(c.status().label, "Up to date");
+  assert.equal(c.status().lastCheckedAt, 1_000);
+  assert.equal((await c.check(2_000)).reason, "recent");
+  assert.equal(updater.checks, 1);
+  assert.equal((await c.check(2_000, { force: true })).checked, true);
+  assert.equal(updater.checks, 2);
+});
+
+test("download progress is a percent, and an error hides tokens", async () => {
+  const { c, updater, statuses } = controller();
+  updater.emit("update-available", { version: "9.9.9" });
+  updater.emit("download-progress", { percent: 41.6 });
+  assert.equal(c.status().phase, "downloading");
+  assert.equal(c.status().percent, 42);
+  assert.equal(c.status().available, "9.9.9");
+  assert.equal(c.status().label, "Downloading 42%");
+  assert.equal(statuses.at(-1).label, "Downloading 42%");
+  updater.emit("update-downloaded", { version: "9.9.9" });
+  updater.emit("error", new Error("401 unauthorized token ghp_abcdefghijklmnopqrstuvwxyz https://github.com/secret"));
+  c.setBusy(false);
+  assert.equal(c.status().phase, "ready");
+  assert.equal(c.status().label, "Update ready, restart to install");
+  assert.equal(JSON.stringify(c.status()).includes("ghp_"), false);
+
+  const failed = controller();
+  failed.updater.emit("error", new Error("bad token ghp_abcdefghijklmnopqrstuvwxyz"));
+  const view = failed.c.status();
+  assert.equal(view.phase, "error");
+  assert.equal(view.label, "Error");
+  assert.equal(view.detail, "Could not reach GitHub");
+  assert.equal(JSON.stringify(view).includes("ghp_"), false);
+});
+
+test("an unpackaged app never looks online, and offline is a status", async () => {
+  const dev = controller({ packaged: false });
+  assert.equal(dev.c.status().phase, "dev");
+  assert.equal(dev.c.status().label, "Not checked in a development build");
+  assert.equal(dev.c.status().buildLabel, "Development build");
+  assert.deepEqual(await dev.c.check(1_000, { force: true }), { checked: false, reason: "dev" });
+  assert.equal(dev.updater.checks, 0);
+
+  const offline = controller({ isOnline: () => false });
+  assert.deepEqual(await offline.c.check(1_000, { force: true }), { checked: false, reason: "offline" });
+  assert.equal(offline.c.status().phase, "offline");
+  assert.equal(offline.c.status().label, "Offline");
+  assert.equal(offline.updater.checks, 0);
 });

@@ -29,9 +29,11 @@ else {
     const bridge = {};
     updater = startUpdater({
       isPackaged: app.isPackaged,
+      appVersion: app.getVersion(),
       isOnline: () => { try { return net.isOnline(); } catch { return false; } },
       userData: app.getPath("userData"),
       flush: () => appWin.flushPage(),
+      onStatus: (info) => { if (appWin) appWin.send("update-status", info); },
       onNotify: (info) => {
         if (info.ready) appWin.send("update-ready", { version: info.version || "" });
         if (bridge.tray) bridge.tray.setUpdateReady(info.ready || info.busy ? { version: info.version, busy: !info.ready } : null);

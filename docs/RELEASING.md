@@ -12,7 +12,7 @@ git tag v2.4.0
 git push origin v2.4.0
 ```
 
-3. The Release workflow (`.github/workflows/release.yml`) runs on `windows-latest`. It builds the Hub, then `electron-builder` builds the NSIS installer and uploads three files to a GitHub Release for that tag:
+3. The Release workflow (`.github/workflows/release.yml`) runs on `windows-latest`. It builds the Hub, writes `src/build-info.json` with the short commit and the build time, then `electron-builder` builds the NSIS installer and uploads three files to a GitHub Release for that tag:
 
 - `dsa_prep_setup_<version>.exe`
 - `dsa_prep_setup_<version>.exe.blockmap`
@@ -25,6 +25,8 @@ The installer is built with `differentialPackage: "store-asar"`, so the blockmap
 ## What the app does
 
 On a packaged build it checks GitHub about 15 seconds after startup, then about every 4 hours, and only when the computer is online. Offline, or any update error, is ignored. The app keeps working from the local data.
+
+Settings in the Hub and in practice has an About section: the version from the app, the commit and build date stamped above, the last check, and the updater state (up to date, checking, downloading with a percent, update ready, offline, or error). The same version sits in the top bar. Check for updates asks immediately. A development run with no stamp says Development build and does not contact GitHub.
 
 A new version downloads in the background. When it is ready, the Hub shows "Update ready" with "Restart now?" and Windows gets one quiet notification. The tray menu has the same action when the tray is on. Restart now quits, installs with no installer window, and opens the app again.
 

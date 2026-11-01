@@ -9,6 +9,7 @@ import * as Onb from "./screens/onboarding.js";
 import * as Ws from "./screens/workspace.js";
 import { parseImport, patternCounts, PATTERNS } from "./core/problems.js";
 import { fmt, addDays, todayKey } from "./core/dates.js";
+import { aboutInner } from "./ui/about.js";
 
 const api = window.api;
 const $app = document.getElementById("app");
@@ -23,6 +24,7 @@ const ctx = {
   showFull: false,    // show the full list during a focus block
   confirm: null,      // { title, body, keeps[], ok, danger, run } for the in-app confirmation dialog
   flash: "",
+  about: null,        // version, build stamp, and updater status from the main process
 };
 // In-progress tries for this session, keyed by slug. Leaving a problem must not wipe them.
 const openAttempts = {};
@@ -32,7 +34,23 @@ function render() {
   $app.innerHTML = (ctx.route === "onboarding" ? Onb.render(ctx) : Ws.render(ctx)) + confirmHtml();
   document.body.dataset.route = ctx.route;
   document.body.classList.toggle("collapsed", ctx.route === "workspace" && store.S.ui.collapsed);
+  paintAbout();
   reportBusy();
+}
+function titleText() {
+  const v = ctx.about && ctx.about.appVersion ? ` ${ctx.about.appVersion}` : "";
+  return (store.S.timer.running ? T.mmss(T.left()) + " " : "") + "DSA Practice" + v;
+}
+function paintAbout() {
+  const a = ctx.about;
+  const ver = document.getElementById("appver");
+  if (ver) {
+    ver.textContent = a && a.appVersion ? `v${a.appVersion}` : "";
+    ver.title = (a && a.buildLabel) || "Development build";
+  }
+  document.title = titleText();
+  const box = document.getElementById("about");
+  if (box) box.innerHTML = aboutInner(a);
 }
 let lastBusy = null;
 function reportBusy() {
@@ -442,6 +460,21 @@ const actions = {
   "confirm-yes": () => { const c = ctx.confirm; ctx.confirm = null; c && c.run(); },
   "confirm-no": () => { ctx.confirm = null; render(); },
   logout: async () => { await api.logout(); ctx.authed = { signedIn: false }; render(); },
+  "check-updates": async (el) => {
+    if (typeof api.checkForUpdates !== "function") return;
+    el.disabled = true;
+    try { await api.checkForUpdates(); } catch { /* the status line shows the failure */ }
+    try { ctx.about = await api.updateStatus(); } catch { /* keep the last status */ }
+    paintAbout();
+  },
+  "install-update": async () => {
+    store.saveNow();
+    const r = await api.installUpdate();
+    if (r && r.ok === false && r.reason === "busy" && ctx.about) {
+      ctx.about = { ...ctx.about, ready: false, label: "Update ready. It installs after this session." };
+      paintAbout();
+    }
+  },
 };
 
 document.addEventListener("click", (e) => {
@@ -585,7 +618,7 @@ setInterval(() => {
     gc.textContent = String(Math.floor(R.gateElapsed(think) / 60000)).padStart(2, "0") + ":" + String(Math.floor(R.gateElapsed(think) / 1000) % 60).padStart(2, "0");
     if (R.gateStuck(think) && !think.stuckShown) { think.stuckShown = true; render(); return; }
   }
-  document.title = (store.S.timer.running ? T.mmss(T.left()) + " " : "") + "DSA Practice";
+  document.title = titleText();
 }, 1000);
 
 // ---------- sidebar resize ----------
@@ -650,3 +683,5 @@ window.__flushSaves = () => store.saveNow();
 })();
 
 if (window.dsaDev) window.__dsa = { ctx, store, render };   // dev and tests only; packaged builds leave this unset
+api.updateStatus?.().then((s) => { ctx.about = s; paintAbout(); }).catch(() => {});
+api.onUpdateStatus?.((s) => { ctx.about = s; paintAbout(); });

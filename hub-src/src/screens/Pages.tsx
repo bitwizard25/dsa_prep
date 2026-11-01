@@ -4,7 +4,7 @@ import { SUBJECT, type SubjectId } from "../core/catalog";
 import { parse, todayKey, daysBetween, priorityOf, fmt } from "../core/planner";
 import { today, recommend, subjectReadiness, overallReadiness, pace, currentTopic, topicMastery, isTopicDone } from "../core/progress";
 import { update } from "../store";
-import { api } from "../api";
+import { api, type UpdateStatus } from "../api";
 import { Button, Icon, Bar, Section, pct, score, howOften, hm, Confirm } from "../ui/kit";
 import { startSession, type Ctx } from "./Today";
 import { videosFor, courseFor, readingFor, subjectReading, CREDITS } from "../core/resources";
@@ -133,7 +133,31 @@ export function ProgressScreen(ctx: Ctx) {
   </div>;
 }
 
-export function SettingsScreen({ ctx, onEditPlan, onReset }: { ctx: Ctx; onEditPlan: () => void; onReset: () => void }) {
+function checkedAt(ms: number | null) {
+  if (!ms) return "not yet";
+  const when = new Date(ms);
+  if (Number.isNaN(when.getTime())) return "not yet";
+  return when.toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+}
+
+function AboutBlock({ about, onCheck }: { about: UpdateStatus | null; onCheck: () => Promise<unknown> }) {
+  const [busy, setBusy] = useState(false);
+  const showAvail = !!about?.available && (about.phase === "downloading" || about.phase === "ready");
+  return <div class="about">
+    <p class="about-ver">Version <b>{about?.appVersion || "—"}</b></p>
+    <p class="hint">{about?.buildLabel || "Development build"}</p>
+    <p class="about-state" role="status">{about?.label || "Not checked yet"}</p>
+    {showAvail && <p class="hint">Available {about.available}</p>}
+    {about?.phase === "error" && about.detail ? <p class="hint">{about.detail}</p> : null}
+    <p class="hint">Last checked {checkedAt(about?.lastCheckedAt ?? null)}</p>
+    <div class="row">
+      {about?.phase === "ready" && about.ready && <Button kind="primary" size="sm" onClick={() => api.installUpdate()}>Restart now</Button>}
+      <Button size="sm" disabled={busy || about?.phase === "checking"} onClick={() => { setBusy(true); Promise.resolve(onCheck()).finally(() => setBusy(false)); }}>Check for updates</Button>
+    </div>
+  </div>;
+}
+
+export function SettingsScreen({ ctx, onEditPlan, onReset, about, onCheck }: { ctx: Ctx; onEditPlan: () => void; onReset: () => void; about: UpdateStatus | null; onCheck: () => Promise<unknown> }) {
   const { hub } = ctx;
   const [confirm, setConfirm] = useState(false);
   return <div class="screen settings">
@@ -147,6 +171,7 @@ export function SettingsScreen({ ctx, onEditPlan, onReset }: { ctx: Ctx; onEditP
       <p class="hint">Your DSA practice app keeps its own plan and settings; nothing here changes them.</p>
     </Section>
     <Section title="About">
+      <AboutBlock about={about} onCheck={onCheck} />
       <p class="hint">Company problem tags are the June dataset ({DATA_DATE}). The app does not fetch a newer list.</p>
     </Section>
     <Section title="Sources and credits">

@@ -12,8 +12,8 @@
     "check": "npm test && npm --prefix hub-src run check",
     "smoke": "electron tools/smoke-electron.cjs",
     "start": "electron .",
-    "dist:win": "electron-builder --win nsis --x64",
-    "dist:linux": "electron-builder --linux AppImage",
+    "dist:win": "node tools/write-build-info.js && electron-builder --win nsis --x64",
+    "dist:linux": "node tools/write-build-info.js && electron-builder --linux AppImage",
     "build:hub": "cd hub-src && npm run build"
   },
   "engines": {

@@ -1,6 +1,7 @@
 // Main practice view: the sidebar next to LeetCode.
 import { ICON } from "../ui/icons.js";
 import { esc, bar, problemList, diffPills, diffMark } from "../ui/components.js";
+import { aboutInner } from "../ui/about.js";
 import { store } from "../core/state.js";
 import * as P from "../core/practice.js";
 import * as T from "../core/timer.js";
@@ -297,6 +298,8 @@ function tabSettings(ctx) {
   return `<h3 class="sub">LeetCode account</h3>
     <div class="acct ${a.signedIn ? "ok" : "no"}">${a.signedIn ? ICON.check : ICON.user}<span>${a.signedIn ? `Connected${a.username ? ` as <b>${esc(a.username)}</b>` : ""}` : "Not connected"}</span>
       ${a.signedIn ? `<button class="btn sm" data-act="logout">Log out</button>` : `<button class="btn primary sm" data-act="login">Log in</button>`}</div>
+    <h3 class="sub">About</h3>
+    <div class="about" id="about">${aboutInner(ctx.about)}</div>
     <h3 class="sub">Focus</h3>
     <label class="check"><input type="checkbox" id="focusBlock" ${store.S.focusBlock ? "checked" : ""}> Block non-LeetCode sites during focus blocks</label>
     <h3 class="sub">Keyboard shortcuts</h3>

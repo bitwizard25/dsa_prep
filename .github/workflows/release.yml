@@ -23,6 +23,8 @@ jobs:
       - run: npm ci
       - run: npm ci --prefix hub-src
       - run: npm run build:hub
+      - name: Stamp the build
+        run: node tools/write-build-info.js
       - name: Build and publish the NSIS installer
         run: npx electron-builder --win nsis --x64 --publish always
         env:

@@ -64,7 +64,8 @@ function registerIpc(appWin, updater, bridge) {
   if (bridge) bridge.tray = tray;
   tray.set(!!((store.read("hub.json") || {}).settings || {}).tray);
   h("session:busy", (on) => { if (updater) updater.setBusy(V.boolPayload(on)); return true; });
-  h("update:status", () => (updater ? updater.status() : { ready: false, version: "" }));
+  h("update:status", () => (updater ? updater.status() : { ready: false, version: "", phase: "dev", percent: null, available: "", lastCheckedAt: null, detail: "", label: "Not checked in a development build", appVersion: "", commit: null, builtAt: null, buildLabel: "Development build" }));
+  h("update:check", () => (updater ? updater.check(Date.now(), { force: true }) : { checked: false, reason: "dev" }));
   h("update:install", () => (updater ? updater.requestRestart() : { ok: false, reason: "none" }));
   h("hub:load", () => store.read("hub.json"));
   h("hub:save", (s) => { store.write("hub.json", V.hubPayload(s)); return true; });

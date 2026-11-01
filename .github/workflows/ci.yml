@@ -26,6 +26,8 @@ jobs:
         if: runner.os == 'Linux'
         run: npm ci
       - run: npm ci --prefix hub-src
+      - name: Stamp the build
+        run: node tools/write-build-info.js
       - run: npm run check
       - run: npm run build:hub
       - name: Electron tests
