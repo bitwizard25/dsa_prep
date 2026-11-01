@@ -171,11 +171,12 @@ export function energy() {
 export function stats() {
   const q = planned(), ds = days(), t = todayKey();
   const a = q.filter((p) => status(p.slug) === "a").length, h = q.filter((p) => status(p.slug) === "h").length;
+  const verified = q.filter((p) => R.isVerifiedAlone(S().progress, p.slug)).length;
   const behind = leftovers().length;                                                    // unsolved from past days
   const ahead = ds.filter((d) => d.date > t).flatMap((d) => d.items).filter((p) => isDone(p.slug)).length;
   const today = ds.find((d) => d.date === t);
   return {
-    total: q.length, alone: a, help: h, done: a + h, behind, ahead,
+    total: q.length, alone: a, help: h, verified, done: a + h, behind, ahead,
     pace: behind ? -behind : ahead,
     todayDone: today ? today.items.filter((p) => isDone(p.slug)).length : 0,
     todayTotal: today ? today.items.length : 0,
@@ -186,4 +187,5 @@ export function stats() {
 export { parse, diffDays };
 
 export function recordAttempt(slug, rec) { R.recordAttempt(S().progress, slug, rec); store.save(); }
+export const verifiedAlone = (slug) => R.isVerifiedAlone(S().progress, slug);
 export function lastInsight(slug) { const list = S().progress.attempts?.[slug] || []; for (let i = list.length - 1; i >= 0; i--) if (list[i].explain?.insight) return list[i].explain.insight; return ""; }

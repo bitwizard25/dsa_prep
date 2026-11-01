@@ -57,6 +57,7 @@ The app opens on the Hub. Practice (the DSA app below) is one click away and wor
   built by tools/build-videos.py). Videos open as a YouTube search for the exact title, since the data has no per-video links.
 
 Hub source: hub-src/ (Preact + TypeScript + Vite), built into src/hub/ with `npm run build:hub`.
+The gold-thread silk (hub-src/src/ui/silk.ts) is drawn only for the Plan Mode welcome and a milestone reached today.
 Hub data: hub.json in the app data folder. The practice app's state.json is only read, never written, by the Hub.
 
 ## Architecture
@@ -86,8 +87,7 @@ Two layers that only talk through `preload/index.js` (a fixed list of functions)
           workspace.js         sidebar: timer, tracker, tabs, collapsed mode
         ui/                    shared components and icons
         data/dataset.js        generated: 3,004 problems, 14 patterns, 35 companies
-        styles/app.css         Obsidian Gold theme
-        ui/silk.js             procedural black-silk + gold ribbon texture (SVG, generated at startup)
+        styles/app.css         Midnight calm: one colour per meaning
         fonts/                 Cormorant Garamond + Manrope (OFL)
 
 ## Practice loop (1.3)
