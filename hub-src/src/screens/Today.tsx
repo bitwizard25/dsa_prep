@@ -110,7 +110,7 @@ function Hero({ ctx, item, next }: { ctx: Ctx; item: TodayItem; next: TodayItem 
       return v ? <p class="start-here"><Icon.play /><span>Start here: <b>{v.title}</b>, {v.channel.replace(/\s*\(.*\)/, "")}, {v.minutes} min{fitNote(v, item.minutes)}</span></p> : null; })()}
     <div class="row">
       {active ? <>
-        <Button kind="primary" size="lg" onClick={() => (item.subject === "dsa" ? api.openPractice({ next: true }) : ctx.go("session", item.id))}><Icon.play /> Continue session</Button>
+        <Button kind="primary" size="lg" onClick={() => (item.subject === "dsa" ? saveNow().then(() => api.openPractice({ next: true })) : ctx.go("session", item.id))}><Icon.play /> Continue session</Button>
         {(item.subject !== "dsa" || !ctx.dsa?.hasPlan || (!item.fromDate && !ctx.dsa.todayTotal)) && <Button onClick={() => ctx.go("complete", item.id)}>Complete</Button>}
       </> : <>
         <Button kind="primary" size="lg" onClick={() => startSession(ctx, item)}><Icon.play /> Start session</Button>

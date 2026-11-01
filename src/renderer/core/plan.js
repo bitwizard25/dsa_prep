@@ -1,5 +1,5 @@
 // The schedule engine. Pure functions: same inputs always give the same plan.
-import { parse, addDays, fmt, diffDays } from "./dates.js";
+import { parse, addDays, fmt, diffDays, isValidDay } from "./dates.js";
 
 /** Minutes per problem, including reading, attempting and a short review. */
 export const COST = { E: 20, M: 40, H: 60 };
@@ -11,24 +11,42 @@ export function isStudyDay(date, daysPerWeek) {
   if (daysPerWeek === 6) return w !== 0;
   return w !== 0 && w !== 6;
 }
-const nextStudyDay = (date, dpw) => { let d = date; while (!isStudyDay(d, dpw)) d = addDays(d, 1); return d; };
+const nextStudyDay = (date, dpw) => {
+  let d = date, n = 0;
+  if (!(d instanceof Date) || Number.isNaN(d.getTime())) return null;
+  while (!isStudyDay(d, dpw)) { if (++n > 14) return null; d = addDays(d, 1); }
+  return d;
+};
 
 /**
  * Pack the queue into days. Each day holds as many problems as fit in hoursPerDay.
  * A day always gets at least one problem, even if it is longer than the budget.
  */
+/** Everything schedule() reads: settings, start date, and each problem's identity and difficulty. */
+export function scheduleCacheKey(profile, queue) {
+  const p = profile || {};
+  const items = (queue || []).map((x) => `${x.slug || x.n || ""}:${x.d || ""}`).join(",");
+  return [p.hoursPerDay, p.daysPerWeek, p.startDate, p.problemsPerDay || 0, items].join("|");
+}
+
+/** A usable daily count, or 0 for time-based packing. Bad values never throw. */
+export function problemCount(n) {
+  if (n == null || n === false || n === "") return 0;
+  const x = typeof n === "number" ? n : Number(n);
+  if (!Number.isFinite(x) || x < 1) return 0;
+  return Math.min(100, Math.floor(x));
+}
+
 export function schedule(queue, { hoursPerDay, daysPerWeek, startDate, problemsPerDay }) {
-  if (problemsPerDay != null && problemsPerDay !== 0 && (!Number.isSafeInteger(problemsPerDay) || problemsPerDay < 1)) {
-    throw new RangeError("problemsPerDay must be a positive integer, or zero for time-based scheduling");
-  }
-  const cap = Math.max(20, hoursPerDay * 60);
+  const perDay = problemCount(problemsPerDay);
+  const cap = Math.max(20, (Number(hoursPerDay) > 0 ? Number(hoursPerDay) : 1) * 60);
   const days = [];
-  if (!queue.length) return days;
+  if (!queue.length || !isValidDay(startDate)) return days;
   // Plans set up from the Hub carry a problem count chosen by the user: exactly that many a day.
-  if (problemsPerDay > 0) {
+  if (perDay > 0) {
     let date = nextStudyDay(parse(startDate), daysPerWeek);
-    for (let i = 0; i < queue.length; i += problemsPerDay) {
-      const items = queue.slice(i, i + problemsPerDay);
+    for (let i = 0; i < queue.length; i += perDay) {
+      const items = queue.slice(i, i + perDay);
       days.push({ date: fmt(date), items, minutes: items.reduce((s, p) => s + cost(p), 0) });
       date = nextStudyDay(addDays(date, 1), daysPerWeek);
     }

@@ -10,6 +10,7 @@ interface Api {
   onReminder(cb: (r: { kind: string; title: string; body: string }) => void): void;
   onHubFocus(cb: () => void): void;
   onHubRoute(cb: (route: string) => void): void;
+  onRemindersRefresh(cb: () => void): void;
 }
 declare global { interface Window { api: Api } }
 export const api = window.api;

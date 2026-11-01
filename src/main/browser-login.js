@@ -28,6 +28,11 @@ function findBrowser() {
 }
 
 const browserName = (exe) => (/msedge/i.test(exe) ? "Edge" : /brave/i.test(exe) ? "Brave" : "Chrome");
+/** Exact leetcode.com host, or a real subdomain. "evilleetcode.com" does not match. */
+function isLeetCodeDomain(domain) {
+  const host = String(domain || "").trim().replace(/^\./, "").toLowerCase();
+  return host === "leetcode.com" || host.endsWith(".leetcode.com");
+}
 const profileDir = () => path.join(app.getPath("userData"), "login-browser");
 
 async function readCookiesHeadless(exe, dir) {
@@ -48,7 +53,7 @@ async function readCookiesHeadless(exe, dir) {
     const res = await cdp.call(ver.webSocketDebuggerUrl, "Storage.getCookies");
     try { await cdp.call(ver.webSocketDebuggerUrl, "Browser.close"); } catch {}
     return {
-      cookies: res.cookies.filter((c) => c.domain.endsWith("leetcode.com")),
+      cookies: res.cookies.filter((c) => isLeetCodeDomain(c.domain)),
       ua: (ver["User-Agent"] || "").replace("HeadlessChrome", "Chrome"),
     };
   } finally {
@@ -107,4 +112,4 @@ function forget() {
   try { fs.rmSync(profileDir(), { recursive: true, force: true }); } catch {}
 }
 
-module.exports = { run, confirmClosed, forget, findBrowser };
+module.exports = { run, confirmClosed, forget, findBrowser, isLeetCodeDomain };

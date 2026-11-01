@@ -10,7 +10,7 @@ export interface HubState {
   goal: Goal | null;
   dsaSetup?: import("./core/dsa-setup").DsaSetup | null;   // read by the practice app on its next start
   createdAt?: string;
-  progress: { topics: Record<string, TopicProgress>; sessions: Record<string, SessionRecord>; quiz?: Record<string, { date: string; score: number; total: number }[]> };
+  progress: { topics: Record<string, TopicProgress>; sessions: Record<string, SessionRecord>; quiz?: Record<string, { date: string; score: number; total: number }[]>; revision?: Record<string, { due: string; topicId: string }> };
   settings: { reminders: boolean; tray: boolean; mustDoAll?: boolean };
 }
 

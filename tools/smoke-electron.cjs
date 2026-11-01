@@ -39,12 +39,12 @@ app.whenReady().then(async () => {
 
   await win.loadFile(path.resolve(__dirname, '../src/hub/index.html'));
   await waitFor('document.querySelectorAll("#root button").length > 0');
-  assert.equal(await win.webContents.executeJavaScript('window.api.hubSave({ version: 1, smoke: true })'), true);
-  assert.equal(await win.webContents.executeJavaScript('(async () => (await window.api.hubLoad()).smoke)()'), true);
+  assert.equal(await win.webContents.executeJavaScript('window.api.hubSave({ version: 1, settings: { reminders: false, tray: true } })'), true);
+  assert.equal(await win.webContents.executeJavaScript('(async () => (await window.api.hubLoad()).settings.tray)()'), true);
   await win.loadFile(path.resolve(__dirname, '../src/renderer/index.html'));
   await waitFor('document.querySelectorAll("#app button").length > 0');
-  assert.equal(await win.webContents.executeJavaScript('window.api.saveState({ version: 2, smoke: true })'), true);
-  assert.equal(await win.webContents.executeJavaScript('(async () => (await window.api.loadState()).smoke)()'), true);
+  assert.equal(await win.webContents.executeJavaScript('window.api.saveState({ version: 2, askEnergy: false })'), true);
+  assert.equal(await win.webContents.executeJavaScript('(async () => (await window.api.loadState()).askEnergy)()'), false);
   assert.deepEqual(errors, []);
   console.log('Electron smoke passed: Hub, Practice, sandboxed preload, IPC and disk saves.');
   lc.wc.close();

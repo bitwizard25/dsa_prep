@@ -3,6 +3,7 @@ const { ipcMain } = require("electron");
 const path = require("path");
 const { pathToFileURL } = require("url");
 const store = require("./store");
+const V = require("./validate");
 const login = require("./browser-login");
 const { Reminders } = require("./reminders");
 const { TrayControl } = require("./tray");
@@ -22,19 +23,20 @@ function registerIpc(appWin) {
 
   // progress data
   h("state:load", () => store.read("state.json"));
-  h("state:save", (s) => { store.write("state.json", s); return true; });
+  h("state:save", (s) => { store.write("state.json", V.statePayload(s)); return true; });
 
   // layout
-  h("ui:layout", (opts) => appWin.setLayout(opts || {}));
-  h("ui:drag", (dragging) => { lc.view.setVisible(!dragging && appWin.mode === "workspace"); return true; });
+  h("ui:layout", (opts) => appWin.setLayout(V.layoutPayload(opts)));
+  h("ui:drag", (dragging) => { lc.view.setVisible(V.boolPayload(dragging) && appWin.mode === "workspace"); return true; });
 
   // LeetCode panel
-  h("lc:open", (slug) => lc.open(slug));
+  h("lc:open", (slug) => lc.open(V.slugPayload(slug)));
   h("lc:home", () => lc.home());
   h("lc:back", () => lc.back());
   h("lc:url", () => lc.url());
-  h("lc:meta", (slug) => lc.problemMeta(slug));
+  h("lc:meta", (slug) => lc.problemMeta(V.slugPayload(slug)));
   h("lc:cover", (on) => lc.setCover(!!on));
+  h("lc:reset", () => (lc.resetStarter ? lc.resetStarter() : false));
   h("focus:set", (on) => lc.setFocus(on));
 
   // login
@@ -61,10 +63,11 @@ function registerIpc(appWin) {
   const tray = new TrayControl(appWin);
   tray.set(!!((store.read("hub.json") || {}).settings || {}).tray);
   h("hub:load", () => store.read("hub.json"));
-  h("hub:save", (s) => { store.write("hub.json", s); return true; });
-  h("view:open", (v) => (typeof v === "string" ? appWin.openView(v) : appWin.openView(v.view, v.route)));
-  h("reminders:set", (items) => reminders.set(items));
-  h("tray:set", (on) => tray.set(on));
+  h("hub:save", (s) => { store.write("hub.json", V.hubPayload(s)); return true; });
+  h("view:open", (v) => { const o = V.viewPayload(v); return appWin.openView(o.view, o.route); });
+  h("reminders:set", (items) => reminders.set(V.remindersPayload(items)));
+  h("tray:set", (on) => tray.set(V.boolPayload(on)));
+  h("window:focus", () => { appWin.focusExisting(); return true; });
   appWin.win.on("focus", () => { if (appWin.view === "hub") appWin.send("hub-focus"); });
 }
 

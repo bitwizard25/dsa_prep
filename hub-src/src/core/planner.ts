@@ -1,11 +1,27 @@
 // The planning engine. Pure functions: the same goal always produces the same plan.
 import { SUBJECTS, SUBJECT, ROLES, COMPANIES, LEVELS, type SubjectId, type Level, type Topic } from "./catalog";
 
-// ---------- dates (local, "YYYY-MM-DD") ----------
-export const parse = (s: string) => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); };
+// ---------- dates ("YYYY-MM-DD", the computer's local time zone) ----------
+export const parse = (s: string) => { const [y, m, d] = String(s || "").split("-").map(Number); return new Date(y, m - 1, d); };
 export const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 export const addDays = (d: Date, n: number) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
-export const todayKey = () => fmt(new Date());
+export const todayKey = (now: Date = new Date()) => fmt(now);
+export function instantKey(value?: string | Date | null): string {
+  if (!value) return "";
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+  const d = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(d.getTime()) ? "" : fmt(d);
+}
+export const localMinutes = (now: Date = new Date()) => now.getHours() * 60 + now.getMinutes();
+/** UTC milliseconds of local midnight at the start of this calendar day. */
+export function localMidnightMs(now: Date = new Date()) {
+  const d = new Date(now);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+export function isValidDay(s: unknown): s is string {
+  return typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(parse(s).getTime()) && fmt(parse(s)) === s;
+}
 export const daysBetween = (a: string, b: string) => Math.round((parse(b).getTime() - parse(a).getTime()) / 864e5);
 export const isStudyDay = (d: Date, perWeek: number) => (perWeek >= 7 ? true : perWeek === 6 ? d.getDay() !== 0 : d.getDay() !== 0 && d.getDay() !== 6);
 
@@ -74,8 +90,14 @@ export const MIN_OTHERS = 60;
 
 /** All study dates from start to target (inclusive). */
 export function studyDates(goal: Goal): string[] {
+  if (!isValidDay(goal.startDate) || !isValidDay(goal.targetDate) || goal.startDate > goal.targetDate) return [];
   const out: string[] = [];
-  for (let d = parse(goal.startDate); fmt(d) <= goal.targetDate; d = addDays(d, 1)) if (isStudyDay(d, goal.daysPerWeek)) out.push(fmt(d));
+  let guard = 0;
+  for (let d = parse(goal.startDate); fmt(d) <= goal.targetDate; d = addDays(d, 1)) {
+    if (++guard > 20000) break;
+    if (Number.isNaN(d.getTime())) break;
+    if (isStudyDay(d, goal.daysPerWeek)) out.push(fmt(d));
+  }
   return out;
 }
 
@@ -245,9 +267,14 @@ export function buildPlan(goal: Goal, mastery: Partial<Record<SubjectId, number>
   const company = COMPANIES.find((c) => c.id === goal.company);
   const ranked = subjects.slice().sort((a, b) => b.share - a.share);
   const weeks = Math.max(1, Math.round(daysBetween(goal.startDate, goal.targetDate) / 7));
+  const weightLine = ranked.length >= 2
+    ? `${SUBJECT[ranked[0].id].short} and ${SUBJECT[ranked[1].id].short} get the most time because they carry the most weight for ${role.name}${company && Object.keys(company.adjust).length ? `, adjusted for ${company.name}` : ""}.`
+    : ranked.length === 1
+      ? `${SUBJECT[ranked[0].id].short} gets the time in this plan.`
+      : "No subjects are in this plan yet.";
   const why = [
     `Your target is ${role.name}${company && company.id !== "other" ? ` at ${company.name}` : ""}, with ${goal.hoursPerDay} h a day for ${weeks} week${weeks === 1 ? "" : "s"}.`,
-    `${SUBJECT[ranked[0].id].short} and ${SUBJECT[ranked[1].id].short} get the most time because they carry the most weight for ${role.name}${company && Object.keys(company.adjust).length ? `, adjusted for ${company.name}` : ""}.`,
+    weightLine,
     rot.length ? `${rot.map((s) => SUBJECT[s.id].short).join(", ")} share a rotating ${rotatingMin}-minute slot, so every subject keeps moving without crowding the day.` : `Every subject gets its own daily block.`,
     interviewFrom < n ? `The last ${n - interviewFrom} study days are Interview mode: timed practice, mocks and revision.` : `The plan is too short for a separate Interview mode, so it covers core topics only.`,
   ];

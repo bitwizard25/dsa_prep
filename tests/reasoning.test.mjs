@@ -40,21 +40,24 @@ test("wordsOk rejects filler", () => {
   for (const bad of ["", "idk", "n/a", "...", "a b"]) assert.equal(R.wordsOk(bad), false, bad);
 });
 
-test("checkThink: lists what's missing, flags slow complexity, judges the pattern", () => {
+test("checkThink: lists what's missing, warns on slow complexity, judges the pattern", () => {
   const facts = { n: 1e5, lines: [], tags: [], accepted: [P("Sliding Window")], live: true };
   const empty = { complexity: "", brute: "", waste: "", pattern: null, patternTries: 0, skipped: false };
   assert.equal(R.checkThink(empty, facts).problems.length, 4);
   const slow = { complexity: "O(n^2)", brute: "try every start and end", waste: "recounts the same window", pattern: P("Sliding Window"), patternTries: 0, skipped: false };
-  assert.match(R.checkThink(slow, facts).problems[0], /too slow/);
+  const slowCheck = R.checkThink(slow, facts);
+  assert.deepEqual(slowCheck.problems, []);
+  assert.match(slowCheck.warning, /too slow/);
+  assert.equal(slowCheck.patternRight, true);
   const good = { ...slow, complexity: "O(n)" };
-  assert.deepEqual(R.checkThink(good, facts), { problems: [], patternRight: true });
+  assert.deepEqual(R.checkThink(good, facts), { problems: [], patternRight: true, warning: "", unverifiable: false });
   assert.equal(R.checkThink({ ...good, pattern: P("Graphs") }, facts).patternRight, false);
   assert.equal(R.checkThink(good, null).patternRight, null);
 });
 
 test("eligibility: only fully honest attempts count as alone", () => {
   const base = { at: "2026-10-29", think: { complexity: "O(n)", brute: "x y z", waste: "x y z", pattern: 2, patternTries: 1, patternCorrect: true, skipped: false },
-    n: 1e5, tags: [], sawSolution: false, accepted: true, explain: { why: "a b c", insight: "a b c" }, result: "a", manual: false };
+    n: 1e5, tags: [], sawSolution: false, accepted: true, explain: { why: "use a hash map", insight: "use a hash map" }, result: "a", manual: false };
   assert.deepEqual(R.eligibility(base), { alone: true, reasons: [] });
   assert.equal(R.eligibility({ ...base, think: null }).alone, false);
   assert.equal(R.eligibility({ ...base, think: { ...base.think, skipped: true } }).alone, false);
@@ -62,12 +65,14 @@ test("eligibility: only fully honest attempts count as alone", () => {
   assert.equal(R.eligibility({ ...base, think: { ...base.think, patternTries: 2 } }).alone, false);
   assert.equal(R.eligibility({ ...base, manual: true }).alone, false);
   assert.equal(R.eligibility({ ...base, accepted: false }).alone, false);
+  assert.equal(R.eligibility({ ...base, explain: null }).alone, false);
+  assert.equal(R.eligibility({ ...base, explain: { why: "", insight: "idk" } }).alone, false);
 });
 
 test("attempt storage: newest last, capped, verified-alone reads the latest", () => {
   const progress = { status: { "two-sum": "a" } };
   const rec = (result, ok) => ({ at: "2026-10-29", think: ok ? { complexity: "O(n)", brute: "x y z", waste: "x y z", pattern: 0, patternTries: 1, patternCorrect: true, skipped: false } : null,
-    n: null, tags: [], sawSolution: false, accepted: true, explain: null, result, manual: false });
+    n: null, tags: [], sawSolution: false, accepted: true, explain: ok ? { insight: "use a hash map" } : null, result, manual: false });
   for (let i = 0; i < 7; i++) R.recordAttempt(progress, "two-sum", rec("a", i % 2 === 0), 5);
   assert.equal(progress.attempts["two-sum"].length, 5);
   assert.equal(R.latestAttempt(progress, "two-sum").think !== null, true);
@@ -78,15 +83,46 @@ test("attempt storage: newest last, capped, verified-alone reads the latest", ()
 });
 
 test("eligibility requires one positively verified pattern choice", () => {
-  const base = { think: { patternTries: 1, patternCorrect: true, skipped: false }, accepted: true, manual: false, sawSolution: false };
+  const base = { think: { patternTries: 1, patternCorrect: true, skipped: false }, accepted: true, manual: false, sawSolution: false, explain: { insight: "use a hash map" } };
   assert.equal(R.eligibility(base).alone, true);
-  for (const think of [{ patternTries: 0, patternCorrect: true }, { patternTries: 1 }, { patternTries: 1, patternCorrect: false }, { patternTries: 2, patternCorrect: true }]) {
-    assert.equal(R.eligibility({ ...base, think }).alone, false);
+  assert.equal(R.eligibility({ ...base, explain: { insight: "" } }).alone, false);
+  for (const think of [
+    { patternTries: 0, patternCorrect: true },
+    { patternTries: 0, patternCorrect: false },
+    { patternTries: 1 },
+    { patternTries: 1, patternCorrect: false },
+    { patternTries: 1, patternCorrect: true, patternUnconfirmed: true },
+    { patternTries: 2, patternCorrect: true },
+  ]) {
+    assert.equal(R.eligibility({ ...base, think }).alone, false, JSON.stringify(think));
   }
 });
 
 test("unknown or malformed constraint sizes do not crash or return a budget", () => {
   for (const n of [-1, NaN, Infinity, "100"]) assert.equal(R.budgetFor(n), null);
+});
+
+test("an unknown custom problem is unverifiable and cannot count as solved alone", () => {
+  const facts = { n: null, lines: [], tags: [], accepted: [], live: false, unverifiable: true };
+  const think = { complexity: "O(n)", brute: "try every pair of values", waste: "repeats the same scan", pattern: 0, patternTries: 0, skipped: false };
+  const check = R.checkThink(think, facts);
+  assert.equal(check.unverifiable, true);
+  assert.equal(check.patternRight, null);
+  assert.equal(check.problems.length, 0);
+  const rec = { think: { ...think, unverifiable: true, patternTries: 1, patternCorrect: false }, accepted: true, manual: false, sawSolution: false, explain: { insight: "use a hash map" } };
+  assert.equal(R.eligibility(rec).alone, false);
+  assert.match(R.eligibility(rec).reasons[0], /can't be checked/);
+  const known = { ...rec, think: { patternTries: 1, patternCorrect: true, skipped: false } };
+  assert.equal(R.eligibility(known).alone, true);
+});
+
+test("a manual mark cannot replace a verified alone solve, and the gate blocks it", () => {
+  const progress = { status: { "two-sum": "a" }, attempts: { "two-sum": [{ result: "a", manual: false, accepted: true, sawSolution: false, explain: { insight: "use a hash map" }, think: { patternTries: 1, patternCorrect: true, skipped: false } }] } };
+  assert.equal(R.isVerifiedAlone(progress, "two-sum"), true);
+  assert.equal(R.canManualMark(progress, "two-sum"), false);
+  assert.match(R.manualMarkBlock(progress, "two-sum", false), /verified/);
+  assert.match(R.manualMarkBlock(progress, "two-sum", true), /Think-first/);
+  assert.equal(R.manualMarkBlock({ status: {} }, "two-sum", false), "");
 });
 
 test("tag mapping never introduces invalid pattern indexes", () => {

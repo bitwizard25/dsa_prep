@@ -5,13 +5,14 @@ import { parse, todayKey, daysBetween, priorityOf, fmt } from "../core/planner";
 import { today, recommend, subjectReadiness, overallReadiness, pace, currentTopic, topicMastery, isTopicDone } from "../core/progress";
 import { update } from "../store";
 import { api } from "../api";
-import { Button, Icon, Bar, Section, Empty, pct, score, howOften, hm, Confirm } from "../ui/kit";
+import { Button, Icon, Bar, Section, pct, score, howOften, hm, Confirm } from "../ui/kit";
 import { startSession, type Ctx } from "./Today";
 import { videosFor, courseFor, readingFor, subjectReading, CREDITS } from "../core/resources";
 import { hasQuiz, Quiz } from "../ui/Quiz";
 import { latestQuiz, activeDays, streakOf } from "../core/progress";
 import { SUBJECT as SUBJ } from "../core/catalog";
 import { dsaMastery } from "../core/practice-bridge";
+import { DATA_DATE } from "../../../src/renderer/data/dataset.js";
 
 const d = (s: string) => parse(s).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
 
@@ -91,14 +92,12 @@ export function PracticeScreen(ctx: Ctx) {
       <p class="eyebrow">DSA practice</p>
       <h2 class="hero-title">{dsa?.hasPlan ? `Your ${dsa.source.split(" + ").map((x) => x[0].toUpperCase() + x.slice(1)).join(" + ")} problem plan` : "Set up your company problem plan"}</h2>
       <p class="hero-meta">{dsa?.hasPlan ? <><b>{dsa.doneToday}</b><span>solved today</span><b>{dsa.soloToday}</b><span>on your own</span></> : <span>LeetCode inside the app, company problem sets, focus timer, spaced redo.</span>}</p>
-      <div class="row"><Button kind="primary" size="lg" onClick={() => api.openPractice()}><Icon.play /> Solve next problem</Button></div>
+      <div class="row"><Button kind="primary" size="lg" onClick={() => ctx.go("practice")}><Icon.play /> Solve next problem</Button></div>
     </div>
     {pats.length > 0 && <Section title="DSA patterns from your practice">
       <ul class="mini-bars wide">{pats.map((p) => { const v = dsaMastery(p) || 0; return <li><span>{p.name}</span><Bar value={v} label={p.name} /><b>{p.alone + p.help}/{p.planned || "-"}</b></li>; })}</ul>
     </Section>}
-    <Section title="Quizzes and mock interviews">
-      <Empty title="Coming in the next update" body="Short quizzes for OOPS, OS, DBMS and CN, and mock rounds for LLD and System Design. Until then, sessions use a guided learn, practise, review checklist." />
-    </Section>
+    <p class="hint">Topic quizzes are on the Subjects page, on each topic.</p>
   </div>;
 }
 
@@ -142,6 +141,9 @@ export function SettingsScreen({ ctx, onEditPlan, onReset }: { ctx: Ctx; onEditP
     <Section title="Plan">
       <div class="row"><Button onClick={onEditPlan}>Edit goal and hours</Button><Button kind="danger" onClick={() => setConfirm(true)}>Start over</Button></div>
       <p class="hint">Your DSA practice app keeps its own plan and settings; nothing here changes them.</p>
+    </Section>
+    <Section title="About">
+      <p class="hint">Company problem tags are the June dataset ({DATA_DATE}). The app does not fetch a newer list.</p>
     </Section>
     <Section title="Sources and credits">
       <p class="hint">Videos open on YouTube; reading opens on the original site. Nothing from these sources is copied into the app.</p>

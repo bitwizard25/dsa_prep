@@ -1,6 +1,6 @@
 // Turns recorded activity into topic mastery, subject readiness, pace and today's recommendation.
-import { SUBJECT, type SubjectId } from "./catalog";
-import { timetable, todayKey, type Plan, type Session, type SubjectAlloc } from "./planner";
+import { SUBJECT, SUBJECTS, type SubjectId } from "./catalog";
+import { timetable, todayKey, instantKey, localMinutes, fmt, parse, addDays, type Plan, type Session, type SubjectAlloc } from "./planner";
 import { dsaMastery, type DsaSummary } from "./practice-bridge";
 import type { HubState } from "../store";
 
@@ -18,10 +18,12 @@ export function activeDays(hub: HubState, dsa?: DsaSummary): Set<string> {
   for (const list of Object.values(hub.progress.quiz || {})) for (const q of list) days.add(q.date);
   return days;
 }
-export function streakOf(days: Set<string>) {
-  const d = new Date(); const key = (x: Date) => `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}-${String(x.getDate()).padStart(2, "0")}`;
-  if (!days.has(key(d))) d.setDate(d.getDate() - 1);
-  let n = 0; while (days.has(key(d))) { n++; d.setDate(d.getDate() - 1); }
+export function streakOf(days: Set<string>, now = new Date()) {
+  const shift = (key: string, n: number) => fmt(addDays(parse(key), n));
+  let key = todayKey(now);
+  if (!days.has(key)) key = shift(key, -1);
+  let n = 0;
+  while (days.has(key) && n < 10000) { n++; key = shift(key, -1); }
   return n;
 }
 
@@ -88,7 +90,7 @@ export const setDsaTruth = (d: DsaSummary | undefined) => { DSA = d; };
 export function finished(hub: HubState, id: string) {
   if (id.endsWith("#dsa") && DSA?.hasPlan) {
     const date = id.split("#")[0], t = todayKey();
-    if (date < t) return DSA.leftovers === 0;                       // earlier days: no leftovers in the practice app
+    if (date < t) return !(DSA.leftByDate && DSA.leftByDate[date] > 0);   // this day only, not every past day
     if (date === t && DSA.todayTotal > 0) return DSA.todayLeft === 0;   // today: every problem of today marked
     if (date > t) return false;
     // No problems scheduled today (interview mode, or the queue is finished): the session's own record decides.
@@ -102,7 +104,7 @@ export function finished(hub: HubState, id: string) {
  */
 export function mustDo(hub: HubState, plan: Plan) {
   const t = todayKey();
-  const since = (hub.createdAt || "").slice(0, 10) || plan.goal.startDate;   // never charge days before the plan existed
+  const since = instantKey(hub.createdAt) || plan.goal.startDate;   // local day the plan was created
   const open = plan.days.flat().filter((s) => s.date < t && s.date >= since && !finished(hub, s.id));
   if (hub.settings.mustDoAll) return { items: open, waiting: 0 };
   const items: Session[] = [];
@@ -111,12 +113,34 @@ export function mustDo(hub: HubState, plan: Plan) {
   return { items, waiting: open.length - items.length };
 }
 
+export function subjectOfTopic(topicId: string): SubjectId | null {
+  for (const s of SUBJECTS) if (s.topics.some((t) => t.id === topicId)) return s.id;
+  return null;
+}
+
+/** Weak quizzes come back as a short revision once their due day arrives. */
+export function dueRevisions(hub: HubState, now = new Date()): Session[] {
+  const t = todayKey(now);
+  return Object.values(hub.progress.revision || {}).filter((r) => r && r.due <= t).map((r) => ({
+    id: `rev#${r.topicId}`, date: r.due, subject: subjectOfTopic(r.topicId) || "oops", minutes: 20, topicId: r.topicId, kind: "practice" as const,
+  }));
+}
+
+export function practiceLocked(hub: HubState, plan: Plan) {
+  return today(hub, plan).some((i) => i.subject === "dsa" && i.locked);
+}
+
 export function today(hub: HubState, plan: Plan, now = new Date()): TodayItem[] {
-  const mins = now.getHours() * 60 + now.getMinutes();
+  const mins = localMinutes(now);
   const [h, m] = plan.goal.startTime.split(":").map(Number);
   const must = mustDo(hub, plan).items;
   // Must-do work goes first, at the day's start time; today's sessions shift later by the same amount.
   let clock = h * 60 + m;
+  const revItems: TodayItem[] = dueRevisions(hub, now).map((s) => {
+    const it: TodayItem = { ...s, startMin: clock, endMin: clock + s.minutes, fromDate: s.date < todayKey(now) ? s.date : undefined, state: "must" };
+    clock += s.minutes + plan.goal.breakMin;
+    return it;
+  });
   const mustItems: TodayItem[] = must.map((s) => {
     const it: TodayItem = { ...s, startMin: clock, endMin: clock + s.minutes, fromDate: s.date, state: hub.progress.sessions[s.id]?.status === "active" ? "active" : "must" };
     clock += s.minutes + plan.goal.breakMin;
@@ -131,7 +155,7 @@ export function today(hub: HubState, plan: Plan, now = new Date()): TodayItem[] 
       : mins >= endMin ? "late" : mins >= startMin ? "current" : "upcoming";
     return { ...s, startMin, endMin, state, locked: locked && state !== "done" && state !== "active" };
   });
-  return [...mustItems, ...rest];
+  return [...revItems, ...mustItems, ...rest];
 }
 
 /** One clear next action: anything in progress, then must-do work, then now, next, and what's still open today. */
@@ -141,9 +165,13 @@ export function recommend(items: TodayItem[]) {
 }
 
 export function sessionLabel(hub: HubState, plan: Plan, s: Session, dsa?: DsaSummary) {
+  if (s.id.startsWith("rev#")) {
+    const name = plan.subjects.flatMap((x) => x.topics).find((t) => t.id === s.topicId)?.name;
+    return name ? `Revision: ${name}` : "Revision of a weak topic";
+  }
   const d = dsa || DSA;
   if (s.subject === "dsa" && d?.hasPlan && s.kind !== "interview") {
-    if (s.date < todayKey()) return `${d.leftovers} leftover problem${d.leftovers === 1 ? "" : "s"}`;
+    if (s.date < todayKey()) { const n = d.leftByDate?.[s.date] || 0; return `${n} leftover problem${n === 1 ? "" : "s"}`; }
     if (d.todayTotal) {
       const shown = d.todayTitles.slice(0, 2).join(", ");
       return `${d.todayPatterns.join(" + ")}: ${shown}${d.todayTotal > 2 ? `, +${d.todayTotal - 2} more` : ""}`;

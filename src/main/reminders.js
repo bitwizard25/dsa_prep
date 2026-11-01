@@ -1,9 +1,32 @@
 // Session reminders: 10 minutes before, at the start and at the end of each of today's sessions.
 // The Hub hands over today's remaining sessions; this schedules system notifications for them.
-const { Notification } = require("electron");
+const { Notification, powerMonitor } = require("electron");
+
+/** Next local midnight, as a UTC millisecond timestamp. */
+function nextLocalMidnight(now = Date.now()) {
+  const d = new Date(now);
+  d.setHours(24, 0, 0, 0);
+  return d.getTime();
+}
 
 class Reminders {
-  constructor(appWin) { this.appWin = appWin; this.timers = []; }
+  constructor(appWin) {
+    this.appWin = appWin; this.timers = []; this.midnight = null;
+    this.armMidnight();
+    try { powerMonitor.on("resume", () => this.refresh()); } catch {}
+  }
+
+  armMidnight() {
+    clearTimeout(this.midnight);
+    const delay = Math.max(1000, nextLocalMidnight() - Date.now());
+    this.midnight = setTimeout(() => { this.refresh(); this.armMidnight(); }, delay);
+  }
+
+  refresh() {
+    this.timers.forEach(clearTimeout);
+    this.timers = [];
+    this.appWin.send("reminders-refresh");
+  }
 
   set(items) {
     this.timers.forEach(clearTimeout);
@@ -30,4 +53,4 @@ class Reminders {
   }
 }
 
-module.exports = { Reminders };
+module.exports = { Reminders, nextLocalMidnight };

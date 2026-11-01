@@ -1,8 +1,10 @@
 import { render } from "preact";
 import { useEffect, useState } from "preact/hooks";
-import { loadState } from "./store";
+import { loadState, saveNow } from "./store";
 import { Boot } from "./App";
 import "./styles.css";
+
+(window as unknown as { __flushSaves?: () => Promise<boolean> }).__flushSaves = () => saveNow();
 
 function Root() {
   const [ready, setReady] = useState(false);

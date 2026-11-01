@@ -16,7 +16,7 @@ function planMenu() {
   return `<details class="planmenu"><summary class="chip" title="Plan options">${esc(srcName())}<span class="caret">${ICON.fwd}</span></summary>
     <div class="pop">
       <button data-act="change-plan">${ICON.target}<span><b>Edit companies & patterns</b><small>Keeps everything you've solved</small></span></button>
-      <button data-act="plan-hours">${ICON.clock}<span><b>Adjust hours & days</b><small>Same problems, new schedule</small></span></button>
+      <button data-act="plan-hours">${ICON.clock}<span><b>${store.S.profile.problemsPerDay > 0 ? "Adjust problems & days" : "Adjust hours & days"}</b><small>Same problems, new schedule</small></span></button>
       ${lo ? `<button data-act="replan">${ICON.next}<span><b>Re-plan from today</b><small>Move ${lo} leftover${lo === 1 ? "" : "s"} forward</small></span></button>` : ""}
       <hr>
       <button data-act="plan-new">${ICON.spark}<span><b>Start a new plan</b><small>Solved history stays</small></span></button>
@@ -66,12 +66,14 @@ function note(ctx) {
       <button class="ghost sm" data-act="login-continue">I logged in and closed it</button></div>`;
   if (ctx.accepted) {
     const a = ctx.accepted, p = P.planned().find((x) => x.slug === a.slug) || P.problemOf(a.slug) || { title: a.slug };
+    const blocked = a.blocked || [];
     return `<div class="note accepted"><b>Accepted: ${esc(p.title)}${a.mins ? ` in ${a.mins} min` : ""}</b>
+      ${ctx.flash ? `<p class="think-nudge" role="status">${esc(ctx.flash)}</p>` : ""}
       <label class="ex"><span>Why does it work? <small>(optional)</small></span><textarea id="exWhy" rows="2">${esc(a.why)}</textarea></label>
       <label class="ex"><span>Key insight <small>(you'll see this on the redo)</small></span><textarea id="exInsight" rows="2">${esc(a.insight)}</textarea></label>
-      ${a.elig.alone ? "" : `<p class="muted">Counts as Help: ${esc(a.elig.reasons.join(", ").toLowerCase())}.</p>`}
-      <div class="row"><button class="btn ${a.elig.alone ? "primary" : ""} sm" data-act="accept-mark" data-st="a" ${a.elig.alone ? "" : "disabled"}>Solved alone</button>
-      <button class="btn ${a.elig.alone ? "" : "primary"} sm" data-act="accept-mark" data-st="h">Needed help</button>
+      ${blocked.length ? `<p class="think-nudge" role="status">Counts as Help: ${esc(blocked.join(", ").toLowerCase())}.</p>` : ""}
+      <div class="row"><button class="btn ${blocked.length ? "" : "primary"} sm" data-act="accept-mark" data-st="a" ${blocked.length ? "disabled" : ""}>Solved alone</button>
+      <button class="btn ${blocked.length ? "primary" : ""} sm" data-act="accept-mark" data-st="h">Needed help</button>
       <button class="textbtn" data-act="accept-dismiss">Not now</button></div></div>`;
   }
 
@@ -90,15 +92,18 @@ function thinkPanel(ctx) {
   const a = ctx.attempt, t = a.think, f = a.facts;
   const prob = P.problemOf(a.slug) || { title: a.slug };
   const budget = f && f.n ? `n up to ${f.n.toLocaleString("en-IN")}: aim for ${R.budgetFor(f.n)} or better.` : f ? "Constraints unavailable: read them in the problem statement." : "Reading the constraints…";
+  const warning = f ? R.checkThink(t, f).warning : "";
   const sel = (k, opts, cur, ph) => `<select data-think="${k}" aria-label="${ph}"><option value="">${ph}</option>${opts.map(([v, l]) => `<option value="${v}" ${String(cur) === String(v) ? "selected" : ""}>${esc(l)}</option>`).join("")}</select>`;
   return `<div class="think" aria-live="polite">
     <span class="eyebrow">Think first</span>
     <h2>${esc(prob.title)}</h2>
     <p class="muted">The editor opens once you've reasoned it out.</p>
+    ${f && f.unverifiable ? `<p class="think-warn" role="status">This problem isn't in the checked set. You can still do Think-first, but it can't count as solved alone.</p>` : ""}
     <label><b>1. Constraints and target</b><small>${esc(budget)}</small>${sel("complexity", R.COMPLEXITIES.map((c) => [c, c]), t.complexity, "Time complexity you're aiming for")}</label>
     <label><b>2. Brute force</b><small>The simplest thing that works, and its cost.</small><textarea data-think="brute" rows="2">${esc(t.brute)}</textarea></label>
     <label><b>3. What it wastes</b><small>The work it repeats or throws away.</small><textarea data-think="waste" rows="2">${esc(t.waste)}</textarea></label>
     <label><b>4. Pattern</b><small>Which of the 14 removes that waste?</small>${sel("pattern", PATTERNS.map((p, i) => [i, p]), t.pattern === null ? "" : t.pattern, "Pick a pattern")}</label>
+    ${warning ? `<p class="think-warn" role="status">${esc(warning)}</p>` : ""}
     ${a.nudge ? `<p class="think-nudge" role="alert">${esc(a.nudge)}</p>` : ""}
     <div class="row"><button class="btn primary" data-act="think-unlock">Unlock editor</button></div>
     <button class="textbtn" data-act="think-skip">Skip Think-first (won't count as solved alone)</button>
@@ -117,7 +122,6 @@ function focusPanel(ctx) {
       <h2>${esc(cur.title)}</h2>
       <p class="meta"><span class="t-${cur.d}">${({ E: "Easy", M: "Medium", H: "Hard" })[cur.d] || ""}</span>, ${esc(cur.pattern || "")}</p>
       ${ctx.attempt?.slug === cur.slug && ctx.attempt.gate && !ctx.attempt.think.skipped && ctx.attempt.think.complexity ? `<p class="myplan"><b>Your plan:</b> ${esc(ctx.attempt.think.complexity)}, ${esc(PATTERNS[ctx.attempt.think.pattern] || "")}</p>` : ""}
-      ${ctx.attempt?.slug === cur.slug && ctx.attempt.unlocked && P.lastInsight(cur.slug) ? `<details class="insight"><summary>Your insight from last time</summary><p>${esc(P.lastInsight(cur.slug))}</p></details>` : ""}
       <div class="alone"><div class="abar"><i id="aloneBar" style="width:${pct}%"></i></div>
         <span id="aloneTxt">${mins < 30 ? `${mins} min alone. Solution unlocks guilt-free at 30.` : `${mins} min. Stuck? Read the approach only, then code it yourself.`}</span></div>
       <div class="row"><button class="btn primary sm" data-act="mark-cur" data-st="a">Solved alone</button><button class="btn sm" data-act="mark-cur" data-st="h">Needed help</button></div>
@@ -175,7 +179,7 @@ function tabPlan() {
   const next7 = P.days().filter((d) => d.date >= todayKey()).slice(0, 7);
   return `<div class="plancard">
       <div class="pc-top"><span class="chip">${esc(srcName())}</span>
-        <span class="row"><button class="btn sm" data-act="plan-hours">Adjust hours</button><button class="btn primary sm" data-act="change-plan">Edit plan</button></span></div>
+        <span class="row"><button class="btn sm" data-act="plan-hours">${store.S.profile.problemsPerDay > 0 ? "Adjust problems" : "Adjust hours"}</button><button class="btn primary sm" data-act="change-plan">Edit plan</button></span></div>
       <div class="pc-grid">
         <div><b>${st.finish ? pretty(st.finish) : "-"}</b><span>finish date</span></div>
         <div><b>${p.hoursPerDay} h</b><span>per day</span></div>
@@ -240,11 +244,12 @@ function tabSettings(ctx) {
     </ul>
     <p class="muted">Drag the sidebar's right edge to resize. Double-click it to reset.</p>
     <h3 class="sub">Data</h3>
-    <p class="muted">Company tags: LeetCode, as of ${DATA_DATE}. Your plan: ${store.S.profile.perPattern || "-"} problems per pattern${store.S.profile.premium ? ", Premium included" : ""}.</p>
+    <p class="muted">Company tags: LeetCode, as of ${DATA_DATE}. The list is not updated from the network. Your plan: ${store.S.profile.perPattern || "-"} problems per pattern${store.S.profile.premium ? ", Premium included" : ""}.</p>
+    <p class="muted">The editor cover is only a reminder. It does not prove you solved a problem alone.</p>
     <h3 class="sub">Plan</h3>
     <div class="setbtns">
       <button class="btn sm" data-act="change-plan">Edit companies & patterns</button>
-      <button class="btn sm" data-act="plan-hours">Adjust hours & days</button>
+      <button class="btn sm" data-act="plan-hours">${store.S.profile.problemsPerDay > 0 ? "Adjust problems & days" : "Adjust hours & days"}</button>
       <button class="btn sm" data-act="plan-new">Start a new plan</button>
       <button class="btn sm" data-act="plan-reset">Reset this plan's progress</button>
     </div>
@@ -253,6 +258,19 @@ function tabSettings(ctx) {
 }
 
 const TABS = [["today", "Problems"], ["plan", "Plan"], ["redo", "Redo"], ["log", "Log"], ["settings", "Settings"]];
+
+// Shown after unlock, outside the focus panel, so a break (or a paused timer) cannot hide it.
+function reviewNotes(ctx) {
+  const a = ctx.attempt;
+  if (!a || a.slug !== ctx.curSlug || !a.unlocked) return "";
+  const warn = a.think && a.think.complexityWarning;
+  const text = P.lastInsight(a.slug);
+  if (!warn && !text) return "";
+  return `<div class="review-notes">
+    ${warn ? `<p class="think-warn" role="status">${esc(warn)}</p>` : ""}
+    ${text ? `<details class="insight" open><summary>Your insight from last time</summary><p>${esc(text)}</p></details>` : ""}
+  </div>`;
+}
 
 export function render(ctx) {
   if (store.S.ui.collapsed) return renderMini(ctx);
@@ -274,6 +292,7 @@ export function render(ctx) {
     ${timerBar()}
     ${tracker()}
     ${note(ctx)}
+    ${reviewNotes(ctx)}
     <nav class="tabs" role="tablist">${TABS.map(([k, l]) => `<button role="tab" aria-selected="${ctx.tab === k}" class="${ctx.tab === k ? "on" : ""}" data-act="tab" data-tab="${k}">${l}${k === "redo" && redoN ? `<i>${redoN}</i>` : ""}</button>`).join("")}</nav>
     <div class="panel">${content}</div>
   </div>`;

@@ -10,16 +10,48 @@ const isLeetCode = (u) => {
 };
 const isLoginUrl = (u) => isLeetCode(u) && /\/accounts\/(login|signup)/.test(u);
 
+// A status counts only when a line is exactly "Accepted". "Not Accepted" does not.
+function exactAccepted(text) {
+  return String(text || "").split(/\n/).map((s) => s.trim()).filter(Boolean).includes("Accepted");
+}
+/**
+ * Decide whether this page view is a fresh Accepted result.
+ * The submission that is already on screen (or opened from the submissions list) is old.
+ * A result counts only after the user leaves the problem editor for a new submission id,
+ * on leetcode.com, and the status line is exactly Accepted.
+ */
+function trackSubmission(state, href, statusText) {
+  const next = state || { prevPath: "", fresh: {}, done: {} };
+  next.fresh ||= {}; next.done ||= {};
+  let url;
+  try { url = new URL(href); } catch { return { fire: false, state: next }; }
+  const host = url.hostname;
+  if (url.protocol !== "https:" || !(host === "leetcode.com" || host.endsWith(".leetcode.com"))) return { fire: false, state: next };
+  const m = url.pathname.match(/^\/problems\/([a-z0-9-]+)\/submissions\/(\d+)\/?$/);
+  if (!m) { next.prevPath = url.pathname; return { fire: false, state: next }; }
+  const slug = m[1], id = m[2];
+  const fromEditor = /^\/problems\/[a-z0-9-]+\/(description\/?)?$/.test(next.prevPath || "");
+  if (next.fresh[id] === undefined) next.fresh[id] = fromEditor;
+  next.prevPath = url.pathname;
+  const accepted = String(statusText || "").split(/\n/).map((s) => s.trim()).filter(Boolean).includes("Accepted");
+  if (!next.fresh[id] || next.done[id]) return { fire: false, state: next, slug, id };
+  if (!accepted) return { fire: false, state: next, slug, id };
+  next.done[id] = true;
+  return { fire: true, state: next, slug, id };
+}
+
 // Watches the LeetCode page for two things that don't change the URL in a useful way:
 //  - the login popup (a password box) -> the app starts the real-browser login instead;
-//  - an "Accepted" submission result -> the app offers one-tap marking.
+//  - a fresh "Accepted" submission for the problem the user just submitted.
 const WATCH = `(() => { if (window.__dsaWatch) return; window.__dsaWatch = true;
+  const track = ${trackSubmission.toString()};
+  const state = { prevPath: "", fresh: {}, done: {} };
   let last = 0;
   const check = () => {
     if (document.querySelector('input[type="password"]') && Date.now() - last > 8000) { last = Date.now(); console.log("__DSA_NEED_LOGIN__"); }
-    const m = location.pathname.match(/\\/problems\\/([^/]+)\\/submissions\\/(\\d+)/);
     const res = document.querySelector('[data-e2e-locator="submission-result"]');
-    if (m && res && /Accepted/.test(res.textContent) && window.__dsaAcc !== m[2]) { window.__dsaAcc = m[2]; console.log("__DSA_ACCEPTED__:" + m[1]); }
+    const out = track(state, location.href, res ? res.textContent : "");
+    if (out.fire) console.log("__DSA_ACCEPTED__:" + out.slug);
   };
   new MutationObserver(() => { clearTimeout(window.__dsaT); window.__dsaT = setTimeout(check, 250); })
     .observe(document.documentElement, { childList: true, subtree: true });
@@ -34,7 +66,7 @@ const coverScript = (on) => `(() => {
   if (!cover) {
     cover = document.createElement("div"); cover.id = "__dsaCover"; cover.setAttribute("role", "note");
     cover.style.cssText = "position:fixed;top:0;right:0;bottom:0;width:55%;z-index:2147483647;display:flex;align-items:center;justify-content:center;padding:32px;text-align:center;background:rgba(21,26,33,.94);color:#E4E8EE;font:600 16px/1.5 system-ui,sans-serif;box-sizing:border-box";
-    cover.textContent = "Think first. Answer the questions in the sidebar, then the editor opens.";
+    cover.textContent = "Think first. This cover is only a reminder, not proof. Answer the questions in the sidebar, then the editor opens.";
     document.documentElement.appendChild(cover);
   }
   if (!window.__dsaKeyGuard) {
@@ -87,7 +119,12 @@ class LeetCodeView {
     });
     wc.on("console-message", ({ message: msg }) => {
       if (msg === "__DSA_NEED_LOGIN__") send("need-login");
-      else if (typeof msg === "string" && msg.startsWith("__DSA_ACCEPTED__:")) send("accepted", msg.slice(17));
+      else if (typeof msg === "string" && msg.startsWith("__DSA_ACCEPTED__:")) {
+        const slug = msg.slice("__DSA_ACCEPTED__:".length);
+        let current = "";
+        try { current = new URL(wc.getURL()).pathname.match(/^\/problems\/([a-z0-9-]+)\/submissions\/\d+\/?$/)?.[1] || ""; } catch {}
+        if (isLeetCode(wc.getURL()) && current && current === slug) send("accepted", slug);
+      }
     });
   }
 
@@ -117,6 +154,16 @@ class LeetCodeView {
       return { content: typeof answer.content === "string" ? answer.content : "", tags: Array.isArray(answer.topicTags) ? answer.topicTags.filter(t => t && typeof t.name === "string").map(t => t.name) : [] };
     } catch { return null; }
     finally { clearTimeout(timer); }
+  }
+
+  /**
+   * After a redo unlock, ask LeetCode to restore starter code.
+   * Returns false when the reset control is not on the page.
+   */
+  async resetStarter() {
+    if (!isLeetCode(this.url())) return false;
+    try { return await this.wc.executeJavaScript(resetStarterScript()); }
+    catch { return false; }
   }
 
   setCover(on) {
@@ -183,4 +230,28 @@ class LeetCodeView {
   }
 }
 
-module.exports = { LeetCodeView, isLeetCode, HOME, coverScript };
+/** Pick LeetCode's reset control from a list of buttons. Null when it is not there. */
+function findResetControl(buttons) {
+  const list = buttons || [];
+  return list.find((b) => {
+    const text = String(b.text || "").trim();
+    const label = String(b.label || "");
+    return /^(reset|reset code)$/i.test(text) || (/reset/i.test(label) && /code/i.test(label));
+  }) || null;
+}
+
+function resetStarterScript() {
+  return `(() => {
+    const buttons = [...document.querySelectorAll("button")].map((el) => ({ el, text: el.innerText || "", label: el.getAttribute("aria-label") || "" }));
+    const reset = buttons.find((b) => /^(reset|reset code)$/i.test(b.text.trim()) || (/reset/i.test(b.label) && /code/i.test(b.label)));
+    if (!reset) return false;
+    reset.el.click();
+    setTimeout(() => {
+      const confirm = [...document.querySelectorAll("button")].find((el) => /^(confirm|reset|yes)$/i.test((el.innerText || "").trim()) && el !== reset.el);
+      if (confirm) confirm.click();
+    }, 250);
+    return true;
+  })()`;
+}
+
+module.exports = { LeetCodeView, isLeetCode, HOME, coverScript, exactAccepted, trackSubmission, WATCH, findResetControl, resetStarterScript };

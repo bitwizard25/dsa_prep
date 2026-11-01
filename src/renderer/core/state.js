@@ -6,7 +6,7 @@ export const freshProfile = () => DEFAULT().profile;
 const DEFAULT = () => ({
   version: 2,
   profile: { onboarded: false, dataVersion: 0, source: null, sources: [], custom: [], patterns: [], perPattern: 30, premium: false, completed: [], hoursPerDay: 3, daysPerWeek: 6, startDate: todayKey(), queue: [], planMode: "hours", targetDate: "" },
-  progress: { status: {}, when: {}, redo: {}, attempts: {} },   // redo: slug -> { due, stage } (spaced repetition)   // status keyed by problem slug: "a" (alone) | "h" (help)
+  progress: { status: {}, when: {}, redo: {}, attempts: {}, solutionSeen: {}, open: {} },   // redo: slug -> { due, stage }   // status: "a" alone | "h" help   // solutionSeen + open: the current try, kept until it is recorded
   log: {},                              // per day: { pomos, energy[], note }
   pomo: { work: 45, brk: 10 },
   timer: null,
@@ -23,6 +23,8 @@ export const store = {
     const raw = await window.api.loadState();
     this.S = migrate(raw);
     this.S.progress.attempts ||= {};
+    this.S.progress.solutionSeen ||= {};
+    this.S.progress.open ||= {};
     if (!this.S.timer) this.S.timer = { mode: "work", left: this.S.pomo.work * 60, running: false, endsAt: 0 };
     return this.S;
   },

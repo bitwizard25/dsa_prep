@@ -1,11 +1,11 @@
 // The Hub shell: left rail, header with the goal, and the screens.
 import { useEffect, useMemo, useState } from "preact/hooks";
-import { buildPlan, todayKey, timetable, clock, parse } from "./core/planner";
+import { buildPlan, todayKey, timetable, clock, parse, localMidnightMs } from "./core/planner";
 import { SUBJECT } from "./core/catalog";
 import { summarizeDsa, type DsaSummary } from "./core/practice-bridge";
 import { dsaSetupFor } from "./core/dsa-setup";
-import { today, sessionLabel, setDsaTruth } from "./core/progress";
-import { useHub, update, emptyState, getState } from "./store";
+import { today, sessionLabel, setDsaTruth, practiceLocked } from "./core/progress";
+import { useHub, update, emptyState, getState, saveNow } from "./store";
 import { api, type ReminderItem } from "./api";
 import { Icon, Toasts, toast, Empty, Button } from "./ui/kit";
 import { PlanMode } from "./screens/PlanMode";
@@ -20,28 +20,33 @@ export function App() {
   const [route, setRoute] = useState<{ name: string; arg?: any }>({ name: START });
   const [planMode, setPlanMode] = useState(false);
   const [dsa, setDsa] = useState<DsaSummary | undefined>();
+  const [reminderTick, setReminderTick] = useState(0);
   const plan = useMemo(() => (hub.goal ? buildPlan(hub.goal) : null), [hub.goal]);
   const go = (name: string, arg?: any) => {
-    if (name === "practice") { api.openPractice(); return; }       // Practice is the LeetCode workspace itself
+    if (name === "practice") {
+      if (plan && practiceLocked(hub, plan)) { toast({ title: "Finish your must-do first", body: "Practice opens once the carried-over work is done." }); return; }
+      saveNow().then(() => api.openPractice());
+      return;
+    }
     setRoute({ name, arg }); document.querySelector("main")?.scrollTo(0, 0);
   };
 
   // DSA progress comes from the practice app's own data; refresh whenever the Hub comes back into view.
   const refreshDsa = () => api.loadState().then((raw) => { const d = summarizeDsa(raw, todayKey()); setDsaTruth(d); setDsa(d); });
-  useEffect(() => { refreshDsa(); api.onHubFocus(refreshDsa); api.onHubRoute((r) => { setPlanMode(false); go(r); }); }, []);
+  useEffect(() => { refreshDsa(); api.onHubFocus(refreshDsa); api.onHubRoute((r) => { setPlanMode(false); go(r); }); api.onRemindersRefresh?.(() => setReminderTick((n) => n + 1)); }, []);
 
   // Reminders: hand today's remaining sessions to the main process, which shows system notifications.
   useEffect(() => {
     if (!plan) return;
     const items = today(hub, plan);
-    const base = new Date(); base.setHours(0, 0, 0, 0);
+    const base = localMidnightMs();
     const list: ReminderItem[] = !hub.settings.reminders ? [] : items.filter((i) => i.state === "upcoming" || i.state === "current").map((i, k, arr) => ({
       id: i.id, title: SUBJECT[i.subject].short, topic: sessionLabel(hub, plan, i, dsa),
-      start: base.getTime() + i.startMin * 60000, end: base.getTime() + i.endMin * 60000,
+      start: base + i.startMin * 60000, end: base + i.endMin * 60000,
       next: arr[k + 1] ? `${SUBJECT[arr[k + 1].subject].short} at ${clock(arr[k + 1].startMin)}` : null,
     }));
     api.setReminders(list);
-  }, [plan, hub.progress.sessions, hub.settings.reminders, dsa]);
+  }, [plan, hub.progress.sessions, hub.settings.reminders, dsa, reminderTick]);
 
   // In-app copy of each reminder, with a Start button when it's a session start.
   useEffect(() => api.onReminder((r) => {

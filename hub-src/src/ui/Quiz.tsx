@@ -2,7 +2,7 @@
 import { useMemo, useState } from "preact/hooks";
 import { QUIZ, type Q } from "../data/quizzes";
 import { update } from "../store";
-import { todayKey } from "../core/planner";
+import { todayKey, fmt, addDays, parse } from "../core/planner";
 import { Button, Icon } from "./kit";
 
 const shuffle = <T,>(a: T[]) => { const x = a.slice(); for (let i = x.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [x[i], x[j]] = [x[j], x[i]]; } return x; };
@@ -24,7 +24,7 @@ export function Quiz({ topicId, onDone }: { topicId: string; onDone?: (score: nu
     return <div class="quiz">
       <p class="eyebrow">Quiz result</p>
       <h3 class="quiz-score">{score} of {qs.length}</h3>
-      <p class="muted">{ratio >= 0.75 ? "Solid. This topic counts as learned in your progress." : "Worth another look. It will come back for revision, and you can retake the quiz any time."}</p>
+      <p class="muted">{ratio >= 0.75 ? "Solid. This topic counts as learned in your progress." : "Worth another look. A 20 minute revision is on your plan in 3 days, and you can retake the quiz any time."}</p>
     </div>;
   }
   const cur = qs[i];
@@ -32,7 +32,12 @@ export function Quiz({ topicId, onDone }: { topicId: string; onDone?: (score: nu
   const next = () => {
     if (i + 1 < qs.length) { setI(i + 1); setPicked(null); return; }
     const final = score;
-    update((s) => { ((s.progress.quiz ||= {})[topicId] ||= []).push({ date: todayKey(), score: final, total: qs.length }); });
+    update((s) => {
+      ((s.progress.quiz ||= {})[topicId] ||= []).push({ date: todayKey(), score: final, total: qs.length });
+      s.progress.revision ||= {};
+      if (final / qs.length < 0.75) s.progress.revision[topicId] = { due: fmt(addDays(parse(todayKey()), 3)), topicId };
+      else delete s.progress.revision[topicId];
+    });
     setDone(true); onDone?.(final, qs.length);
   };
   return <div class="quiz" aria-live="polite">
