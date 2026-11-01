@@ -2,12 +2,20 @@
 import { DIFF, companyTags, isCompanyPlan, toIds } from "../core/problems.js";
 import { store } from "../core/state.js";
 import { status } from "../core/practice.js";
+import { isVerifiedAlone, latestAttempt, isV2 } from "../core/reasoning.js";
 
 export const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
-export function bar(a, h, total) {
-  const pa = total ? (a / total) * 100 : 0, ph = total ? (h / total) * 100 : 0;
-  return `<div class="bar" role="img" aria-label="${a} alone, ${h} with help, of ${total}"><i class="a" style="width:${pa}%"></i><i class="h" style="width:${ph}%"></i></div>`;
+export function bar(a, h, total, verified = 0) {
+  const v = Math.max(0, Math.min(a, verified || 0));
+  const pv = total ? (v / total) * 100 : 0, pa = total ? ((a - v) / total) * 100 : 0, ph = total ? (h / total) * 100 : 0;
+  return `<div class="bar" role="img" aria-label="${v} verified alone, ${a - v} marked alone, ${h} with help, of ${total}"><i class="v" style="width:${pv}%"></i><i class="a" style="width:${pa}%"></i><i class="h" style="width:${ph}%"></i></div>`;
+}
+
+/** Difficulty is a small dot and a letter, in LeetCode's green, amber and red. */
+export function diffMark(d, extra = "") {
+  const letter = d === "E" || d === "M" || d === "H" ? d : "?";
+  return `<span class="diff" title="${esc(DIFF[d] || "")}"><i class="d-${esc(d)}"></i><span class="t-${esc(d)}">${extra}${letter}</span></span>`;
 }
 
 // Only mark exceptions: a badge on every row says nothing.
@@ -28,11 +36,14 @@ function tagHtml(p) {
 
 export function problemRow(p, curSlug) {
   const st = status(p.slug);
-  return `<li class="item ${st ? "st-" + st : ""} ${p.slug === curSlug ? "cur" : ""}">
-    <span class="dot d-${p.d}" title="${DIFF[p.d] || ""}"></span>
+  const verified = st === "a" && isVerifiedAlone(store.S.progress, p.slug);
+  const prior = latestAttempt(store.S.progress, p.slug);
+  const v1 = prior && prior.think && !isV2(prior.think);
+  return `<li class="item ${st ? "st-" + st : ""} ${verified ? "verified" : ""} ${p.slug === curSlug ? "cur" : ""}">
+    ${diffMark(p.d)}
     <div class="body">
       <button class="link" data-act="open" data-slug="${p.slug}">${esc(p.title)}</button>
-      <span class="meta">${p.n !== "?" ? "#" + p.n + ", " : ""}<span class="t-${p.d}">${DIFF[p.d] || "Unknown"}</span>${tagHtml(p)}</span>
+      <span class="meta">${st ? `<span class="chk" aria-hidden="true">✓</span>` : ""}${p.n !== "?" ? "#" + p.n : ""}${v1 ? `<span class="tag core" title="Recorded before Think-first v2. The mark is unchanged.">v1</span>` : ""}${tagHtml(p)}</span>
     </div>
     <div class="seg" role="group" aria-label="Mark ${esc(p.title)}">
       <button class="a ${st === "a" ? "on" : ""}" data-act="mark" data-slug="${p.slug}" data-st="a" aria-pressed="${st === "a"}" title="Solved on my own">Alone</button>
@@ -44,7 +55,7 @@ export const problemList = (arr, curSlug, empty = "Nothing here.") =>
   arr.length ? `<ul class="list">${arr.map((p) => problemRow(p, curSlug)).join("")}</ul>` : `<p class="empty">${empty}</p>`;
 
 export function diffPills(c) {
-  return `<span class="pills"><span class="pill e">${c.E} E</span><span class="pill m">${c.M} M</span><span class="pill h">${c.H} H</span></span>`;
+  return `<span class="pills">${diffMark("E", c.E + " ")}${diffMark("M", c.M + " ")}${diffMark("H", c.H + " ")}</span>`;
 }
 
 export const monogram = (name) => esc(name.split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase());

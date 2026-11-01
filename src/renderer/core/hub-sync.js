@@ -7,12 +7,20 @@ function wholeNumber(n) {
   return Number.isSafeInteger(n) && n > 0 ? n : null;
 }
 
+/** A Plan Mode plan has a setup id. The Hub owns that goal; practice must not write it. */
+export function planOwnedByHub(hub) {
+  const id = hub && hub.dsaSetup && hub.dsaSetup.id;
+  return typeof id === "string" && id.length > 0 && !id.startsWith("practice:");
+}
+
 /**
- * Copy the practice plan onto the Hub goal and the setup note.
+ * Copy a practice-only plan onto the Hub goal.
+ * A Plan Mode plan is left untouched, valid numbers and invalid ones alike.
  * Role, dates, hours, and anything the practice screen did not set stay as they are.
  */
 export function syncPracticePlan(hub, profile) {
-  if (!hub || !hub.goal || !profile) return { hub, profile, changed: false };
+  if (!hub || !hub.goal || !profile) return { hub, profile, changed: false, owned: false };
+  if (planOwnedByHub(hub)) return { hub, profile, changed: false, owned: true };
   const goal = { ...hub.goal };
   const ppd = wholeNumber(profile.problemsPerDay);
   if (ppd) goal.problemsPerDay = ppd;
@@ -41,5 +49,5 @@ export function syncPracticePlan(hub, profile) {
     },
   };
   nextProfile.hubSetupId = id;
-  return { hub: nextHub, profile: nextProfile, changed: true };
+  return { hub: nextHub, profile: nextProfile, changed: true, owned: false };
 }

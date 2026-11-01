@@ -1,14 +1,14 @@
-// Procedural black-silk texture with tapered gold ribbons, drawn as SVG (no image files).
+// Gold-thread silk, drawn once and only shown on the Plan Mode welcome and a milestone reached today.
 let n = 0;
-// Each ribbon: top edge and bottom edge (bottom drawn back from right to left), so the width can vary.
 const RIBBONS = [
   { d: "M-80 190 C 170 100 360 400 640 340 C 860 292 1010 540 1300 452 L1300 482 C 1010 574 870 322 640 366 C 352 428 168 140 -80 222 Z", tone: "bright", o: 1 },
   { d: "M-80 262 C 190 196 370 486 650 432 C 880 388 1030 618 1300 560 L1300 572 C 1030 632 880 404 650 446 C 362 504 186 214 -80 278 Z", tone: "deep", o: 0.9 },
   { d: "M-80 92 C 170 28 420 262 700 214 C 900 180 1080 360 1300 318 L1300 324 C 1080 368 900 190 700 222 C 418 272 168 40 -80 100 Z", tone: "bright", o: 0.5 },
 ];
-export function silk({ seed = 4, ribbons = 3, sheen = 1, id } = {}) {
+
+export function silk({ seed = 4, ribbons = 2, sheen = 0.5, id = "" } = {}) {
   const k = id || "s" + (++n);
-  const ribbon = ({ d, tone, o }) => `
+  const ribbon = ({ d, tone, o }: { d: string; tone: string; o: number }) => `
     <path d="${d}" fill="url(#${k}${tone})" opacity="${0.45 * o}" filter="url(#${k}glow)"/>
     <path d="${d}" fill="url(#${k}${tone})" opacity="${o}" filter="url(#${k}grain)"/>`;
   return `<svg xmlns="http://www.w3.org/2000/svg" class="silk" viewBox="0 0 1200 800" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
@@ -47,5 +47,19 @@ export function silk({ seed = 4, ribbons = 3, sheen = 1, id } = {}) {
 </svg>`;
 }
 
-/** The texture as a CSS url(): decoded once by the browser and reused on every render. */
-export const silkUrl = (opts) => `url("data:image/svg+xml;charset=utf-8,${encodeURIComponent(silk(opts))}")`;
+const silkUrl = (opts?: { seed?: number; ribbons?: number; sheen?: number; id?: string }) =>
+  `url("data:image/svg+xml;charset=utf-8,${encodeURIComponent(silk(opts))}")`;
+
+let welcome: string | null = null;
+let moment: string | null = null;
+export function welcomeSilk() {
+  if (!welcome) welcome = silkUrl({ seed: 4, ribbons: 2, sheen: 0.5, id: "welcome" });
+  return welcome;
+}
+export function milestoneSilk() {
+  if (!moment) moment = silkUrl({ seed: 11, ribbons: 2, sheen: 0.45, id: "moment" });
+  return moment;
+}
+
+/** A dark scrim keeps text on slate even where a gold ribbon passes behind it. */
+export const silkBackdrop = (url: string) => `linear-gradient(rgba(21,26,33,.86), rgba(21,26,33,.93)), ${url}`;

@@ -12,6 +12,7 @@ import { hasQuiz, Quiz } from "../ui/Quiz";
 import { latestQuiz, activeDays, streakOf } from "../core/progress";
 import { SUBJECT as SUBJ } from "../core/catalog";
 import { dsaMastery } from "../core/practice-bridge";
+import { milestoneSilk, silkBackdrop } from "../ui/silk";
 import { DATA_DATE } from "../../../src/renderer/data/dataset.js";
 
 const d = (s: string) => parse(s).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
@@ -41,7 +42,7 @@ export function RoadmapScreen(ctx: Ctx) {
     })}</ol>
     <Section title="Milestones">
       <ul class="milestones">{plan.milestones.filter((m, i, a) => m.name !== "Mock interview" || a.findIndex((x) => x.name === "Mock interview") === i || m.date >= t).slice(0, 12).map((m) => (
-        <li class={m.date < t ? "past" : ""}><span>{d(m.date)}</span><b>{m.name}</b><span class="muted">{m.date >= t ? `${daysBetween(t, m.date)} days` : "passed"}</span></li>))}</ul>
+        <li key={m.id} class={m.date <= t ? "reached" : ""} style={m.date === t ? { backgroundImage: silkBackdrop(milestoneSilk()) } : undefined}><span>{d(m.date)}</span><b>{m.name}</b><span class="muted">{m.date > t ? `${daysBetween(t, m.date)} days` : m.date === t ? "today" : "reached"}</span></li>))}</ul>
     </Section>
   </div>;
 }
@@ -70,7 +71,7 @@ export function SubjectsScreen(ctx: Ctx) {
             return <li class={done ? "done" : cur?.id === tp.id ? "current" : ""}>
               <span class="t-mark" aria-hidden="true">{done ? "✓" : cur?.id === tp.id ? "→" : "○"}</span>
               <span class="t-name">{tp.name}<small>{["", "Foundation", "Core", "Advanced"][tp.level]}{dt ? `, planned ${d(dt.start)}` : ""}{videosFor(tp.id).length ? `, ${videosFor(tp.id).length} video${videosFor(tp.id).length === 1 ? "" : "s"}` : ""}{readingFor(tp.id).length ? `, ${readingFor(tp.id).length} to read` : ""}</small></span>
-              <span class="t-bar"><Bar value={m} tone={done ? "good" : "accent"} label={`${tp.name} mastery`} /></span><span class="t-pct">{m < 0.005 ? "" : pct(m)}</span>
+              <span class="t-bar"><Bar value={m} tone={done ? "muted" : "accent"} label={`${tp.name} mastery`} /></span><span class="t-pct">{m < 0.005 ? "" : pct(m)}</span>
               <span class="t-quiz">{hasQuiz(tp.id) ? <button class="linkbtn" onClick={() => ctx.go("quiz", tp.id)} title="Take the quiz">{latestQuiz(hub, tp.id) === null ? "Quiz" : `Quiz ${Math.round(latestQuiz(hub, tp.id)! * 4)}/4`}</button> : null}</span>
             </li>;
           })}</ol>
@@ -114,7 +115,7 @@ export function ProgressScreen(ctx: Ctx) {
     <div class="stats3">
       <div><span class="eyebrow">Overall readiness</span><b class="num">{quizzed || overall >= 0.005 ? pct(overall) : "Not started"}</b><small>{!quizzed && overall < 0.005 ? "Your first session starts it" : quizzed ? `From practice and ${quizzed} quiz${quizzed === 1 ? "" : "zes"}` : "Estimate until you take a quiz"}</small></div>
       <div><span class="eyebrow">This week</span><b class="num">{hm(week)}</b><small>studied in the Hub</small></div>
-      <div><span class="eyebrow">Streak</span><b class="num">{streak} day{streak === 1 ? "" : "s"}</b><small>any session, problem or focus block</small></div>
+      <div><span class="eyebrow">Streak</span><b class="num earned">{streak} day{streak === 1 ? "" : "s"}</b><small>any session, problem or focus block</small></div>
     </div>
     <Section title="By subject">
       <ul class="readiness">{plan.subjects.slice().sort((a, b) => b.share - a.share).map((s) => {
@@ -123,6 +124,9 @@ export function ProgressScreen(ctx: Ctx) {
           <span class={pc <= -2 ? "warn-t" : "muted"}>{pc <= -2 ? `${-pc} days behind` : pc >= 2 ? `${pc} days ahead` : "on pace"}</span></li>;
       })}</ul>
     </Section>
+    {dsa && Object.entries(dsa.think || {}).some(([, s]) => s.v1 || s.v2) && <Section title="Think-first by pattern">
+      <ul class="mini-bars wide">{Object.entries(dsa.think).filter(([, s]) => s.v1 || s.v2).map(([name, s]) => <li><span>{name}{s.v1 ? ` · ${s.v1} v1` : ""}</span><span class="muted">{s.v2 ? `chain ${s.chain == null ? "–" : Math.round(s.chain * 100) + "%"}, understood ${s.understand == null ? "–" : Math.round(s.understand * 100) + "%"}, gate ${s.gateSec == null ? "–" : s.gateSec + "s"}, matched ${s.matched == null ? "–" : Math.round(s.matched * 100) + "%"}` : "v1 only"}</span></li>)}</ul>
+    </Section>}
     <details class="more"><summary>How these numbers are calculated</summary>
       <p>DSA comes from your practice app. Recorded Think-first solves without opening the solution count fully; other alone marks count half, and help counts a quarter. For OOPS, OS, DBMS and CN, a topic's latest quiz score counts 60% and study time against its planned time 40%. Before you take a topic's quiz, your self-rating after sessions stands in for it. LLD and System Design use time and self-rating until mock rounds arrive.</p>
     </details>

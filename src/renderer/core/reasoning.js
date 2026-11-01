@@ -26,11 +26,27 @@ const TAG_PATTERN = [
   [["Hash Table", "Prefix Sum", "Counting"], "Arrays & Hashing"],
 ];
 
-/** Every pattern that genuinely fits: the primary one plus any a specific tag points to. */
-export function acceptedPatterns(primary, tags) {
-  const out = new Set(Number.isInteger(primary) && primary >= 0 && primary < PATTERNS.length ? [primary] : []);
-  for (const [group, name] of TAG_PATTERN) if (group.some((t) => (tags || []).includes(t)) && PI(name) >= 0) out.add(PI(name));
+const BROAD_TAGS = new Set(["Array", "String", "Math", "Sorting", "Matrix"]);
+
+/** Patterns named by a specific LeetCode tag. Broad tags never add one. */
+export function patternsFromTags(tags) {
+  const out = new Set();
+  for (const [group, name] of TAG_PATTERN) {
+    if (group.some((t) => (tags || []).includes(t) && !BROAD_TAGS.has(t)) && PI(name) >= 0) out.add(PI(name));
+  }
   return [...out].sort((a, b) => a - b);
+}
+
+/**
+ * Patterns that count for this problem.
+ * When a specific tag exists, only those patterns count: a dataset primary that came from a broad tag does not.
+ * With no specific tag, the dataset primary is the fallback. Broad tags still add nothing.
+ */
+export function acceptedPatterns(primary, tags) {
+  const specific = patternsFromTags(tags);
+  if (specific.length) return specific;
+  const primaryOk = Number.isInteger(primary) && primary >= 0 && primary < PATTERNS.length;
+  return primaryOk ? [primary] : [];
 }
 
 // "10^5", "5 * 10^4", "2*10^5", "5000" -> number
@@ -78,6 +94,83 @@ export function fitsBudget(choice, n) {
   return COMPLEXITIES.indexOf(choice) <= COMPLEXITIES.indexOf(b) ? "ok" : "too-slow";
 }
 
+/** One row of the waste -> fix -> pattern table. The pattern names are the dataset's. */
+export const WASTE_FIX = [
+  { id: "dp", waste: "Same subproblem solved again", fix: "Store results", patterns: ["Dynamic Programming"] },
+  { id: "window", waste: "Overlapping range re-scanned", fix: "Slide a window / prefix sums", patterns: ["Sliding Window", "Arrays & Hashing"] },
+  { id: "hash", waste: "Searching values one by one", fix: "Hash lookup", patterns: ["Arrays & Hashing"] },
+  { id: "bin", waste: "Searching a sorted or monotonic space one by one", fix: "Halve the space", patterns: ["Binary Search"] },
+  { id: "pair", waste: "Comparing every pair", fix: "Sort, then two pointers", patterns: ["Two Pointers"] },
+  { id: "stack", waste: "Re-scanning for the next bigger or smaller item", fix: "Keep a monotonic stack", patterns: ["Stack & Monotonic Stack"] },
+  { id: "heap", waste: "Recomputing min, max or kth each time", fix: "Keep a heap", patterns: ["Heaps & Top K"] },
+  { id: "back", waste: "Exploring branches that can't work", fix: "Prune early", patterns: ["Backtracking"] },
+  { id: "graph", waste: "Visiting the same node or state again", fix: "Visited set, BFS or DFS", patterns: ["Graphs", "Trees"] },
+  { id: "trie", waste: "Re-checking shared prefixes of words", fix: "Trie", patterns: ["Tries"] },
+  { id: "greedy", waste: "Trying every order when a local choice is safe", fix: "Greedy choice", patterns: ["Greedy"] },
+  { id: "interval", waste: "Checking intervals pair by pair", fix: "Sort by start", patterns: ["Intervals"] },
+  { id: "list", waste: "Extra pass or extra space on a list", fix: "Fast and slow pointers", patterns: ["Linked Lists"] },
+];
+export const EDGE_CASES = [
+  ["empty", "Empty"], ["one", "One element"], ["dupes", "Duplicates"], ["neg", "Negatives"],
+  ["equal", "All equal"], ["overflow", "Overflow"], ["sorted", "Already sorted"], ["cycles", "Cycles"],
+];
+export const GATE_LIMIT_MS = 10 * 60 * 1000;
+export const SELF_GRADES = [["matched", "Matched"], ["partly", "Partly"], ["missed", "Missed"]];
+
+const rowById = (id) => WASTE_FIX.find((r) => r.id === id) || null;
+
+/** Example 1's input and output from a LeetCode statement, or null when the page doesn't have both. */
+export function parseExample(html) {
+  if (!html) return null;
+  const text = html.replace(/<sup>(.*?)<\/sup>/gi, "^$1").replace(/<br\s*\/?>/gi, "\n").replace(/<\/(p|pre|div|li|h\d)>/gi, "\n").replace(/<[^>]+>/g, "")
+    .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&");
+  const ex = text.split(/Example\s*1\b/i)[1];
+  if (!ex) return null;
+  const input = (ex.match(/Input:\s*([\s\S]*?)Output:/i) || [])[1];
+  const output = (ex.match(/Output:\s*([\s\S]*?)(?:Explanation:|Example\s*2\b|Constraints:|$)/i) || [])[1];
+  if (!input || !output || !input.trim() || !output.trim()) return null;
+  return { input: input.trim(), output: output.trim() };
+}
+const normOut = (s) => String(s || "").trim().replace(/\s+/g, "").toLowerCase();
+export function outputsMatch(typed, expected) {
+  return normOut(typed) !== "" && normOut(typed) === normOut(expected);
+}
+
+/**
+ * Brute force against the budget and against the target the user picked.
+ * Faster than the target is a contradiction: the brute force cannot be a tighter bound than the aim.
+ */
+export function judgeBrute(target, bruteComplexity, n) {
+  const fit = fitsBudget(bruteComplexity, n);
+  const both = COMPLEXITIES.includes(target) && COMPLEXITIES.includes(bruteComplexity);
+  return {
+    bruteFits: fit === "ok",
+    contradiction: both && COMPLEXITIES.indexOf(bruteComplexity) < COMPLEXITIES.indexOf(target),
+    fit,
+  };
+}
+
+/**
+ * The fix has to be the one paired with the waste, and the pattern has to be one of the problem's specific tags.
+ * No specific tag means the chain cannot be checked.
+ */
+export function judgeChain(wasteId, fixId, tags) {
+  const row = rowById(wasteId);
+  const fixMatches = !!(row && fixId && row.id === fixId);
+  const specific = patternsFromTags(tags);
+  const indexes = row ? row.patterns.map((name) => PI(name)).filter((i) => i >= 0) : [];
+  const patternRight = specific.length > 0 && indexes.some((i) => specific.includes(i));
+  return { fixMatches, patternRight, unverifiable: specific.length === 0, patterns: indexes, chainCorrect: fixMatches && patternRight };
+}
+
+export function gateElapsed(think, now = Date.now()) {
+  const start = think && think.gateStarted;
+  return start ? Math.max(0, now - start) : 0;
+}
+export function gateStuck(think, now = Date.now()) {
+  return !!(think && think.version === 2 && !think.skipped && gateElapsed(think, now) >= GATE_LIMIT_MS);
+}
+
 const FILLER = /^(idk|i don'?t know|na|n\/a|none|nothing|skip|no idea|-+|\.+|\?+)$/i;
 /** At least `min` real words (2+ letters or digits), and not a filler answer. */
 export function wordsOk(text, min = 3) {
@@ -110,8 +203,28 @@ export function checkThink(think, facts) {
   return { problems, patternRight, warning, unverifiable };
 }
 
+/** v2 records carry think.version 2. Anything else stays on the original rule and is not re-scored. */
+export function isV2(think) { return !!(think && think.version === 2); }
+
+function eligibilityV2(rec) {
+  const reasons = [];
+  const t = rec.think;
+  if (!t || t.skipped) reasons.push("Think-first was skipped");
+  else if (t.exampleResult === "misunderstood") reasons.push("The example output was wrong");
+  else if (t.exampleResult === "unverified") reasons.push("The example was worked by hand, not checked");
+  else if (t.exampleResult !== "correct") reasons.push("The example was not checked");
+  else if (t.bruteFits) { /* brute force already fit: steps 4 and 5 are not a chain */ }
+  else if (t.chainTries !== 1 || t.chainCorrect !== true) reasons.push("The waste and fix were not right on the first try");
+  if (rec.sawSolution) reasons.push("You opened the solution before Accepted");
+  if (rec.manual) reasons.push("Marked by hand, not after Accepted");
+  else if (!rec.accepted) reasons.push("Not marked after an Accepted submission");
+  if (!t || t.selfGrade !== "matched") reasons.push("The editorial self-grade was not matched");
+  return { alone: reasons.length === 0, reasons };
+}
+
 /** "Solved alone" is earned, not clicked: every condition must hold. */
 export function eligibility(rec) {
+  if (isV2(rec && rec.think)) return eligibilityV2(rec);
   const reasons = [];
   if (!rec.think || rec.think.skipped) reasons.push("Think-first was skipped");
   else if (rec.think.unverifiable) reasons.push("This problem's pattern can't be checked, so it can't count as solved alone");
@@ -122,6 +235,44 @@ export function eligibility(rec) {
   else if (!rec.accepted) reasons.push("Not marked after an Accepted submission");
   if (!rec.explain || !wordsOk(rec.explain.insight)) reasons.push("The key insight was not written down");
   return { alone: reasons.length === 0, reasons };
+}
+
+/** Per-pattern rates from recorded tries. v1 tries are counted, not folded into the v2 rates. */
+export function thinkStats(attempts, patternOf) {
+  const by = {};
+  for (const [slug, list] of Object.entries(attempts || {})) {
+    const name = patternOf(slug);
+    if (!name || !Array.isArray(list)) continue;
+    const b = by[name] || (by[name] = { v1: 0, v2: 0, chainYes: 0, chainN: 0, understood: 0, understandN: 0, gateMs: 0, gateN: 0, matched: 0, gradeN: 0 });
+    for (const rec of list) {
+      const t = rec && rec.think;
+      if (!t) continue;
+      if (!isV2(t)) { b.v1++; continue; }
+      b.v2++;
+      if (t.exampleResult === "correct" || t.exampleResult === "misunderstood") {
+        b.understandN++;
+        if (t.exampleResult === "correct") b.understood++;
+      }
+      if (!t.skipped && !t.bruteFits && t.chainTries) {
+        b.chainN++;
+        if (t.chainCorrect && t.chainTries === 1) b.chainYes++;
+      }
+      if (t.gateMs > 0) { b.gateMs += t.gateMs; b.gateN++; }
+      if (t.selfGrade) { b.gradeN++; if (t.selfGrade === "matched") b.matched++; }
+    }
+  }
+  const rate = (n, d) => (d ? n / d : null);
+  const out = {};
+  for (const [name, b] of Object.entries(by)) {
+    out[name] = {
+      v1: b.v1, v2: b.v2,
+      chain: rate(b.chainYes, b.chainN),
+      understand: rate(b.understood, b.understandN),
+      gateSec: b.gateN ? Math.round(b.gateMs / b.gateN / 1000) : null,
+      matched: rate(b.matched, b.gradeN),
+    };
+  }
+  return out;
 }
 /** A manual mark must not replace a solve that already earned verified alone. */
 export function canManualMark(progress, slug) {
