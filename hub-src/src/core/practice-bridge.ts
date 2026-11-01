@@ -3,7 +3,7 @@ import { PROBLEMS, PATTERNS } from "../../../src/renderer/data/dataset.js";
 // The practice app's own scheduling code and problem table: the Hub never re-derives DSA days its own way.
 import { schedule } from "../../../src/renderer/core/plan.js";
 import { BY_SLUG } from "../../../src/renderer/core/problems.js";
-import { isVerifiedAlone, latestAttempt } from "../../../src/renderer/core/reasoning.js";
+import { isVerifiedAlone, latestAttempt, thinkStats } from "../../../src/renderer/core/reasoning.js";
 import { todayKey, parse, addDays, fmt } from "../../../src/renderer/core/dates.js";
 
 export interface DsaPattern { name: string; alone: number; help: number; planned: number; verified: number }
@@ -12,6 +12,7 @@ export interface DsaSummary {
   todayTotal: number; todayLeft: number; leftovers: number;         // from the practice app's schedule
   todayPatterns: string[]; todayTitles: string[]; nextSlug: string | null;
   leftByDate: Record<string, number>;   // past study days that still have unmarked problems
+  think: Record<string, { v1: number; v2: number; chain: number | null; understand: number | null; gateSec: number | null; matched: number | null }>;
 }
 
 const patternOf = new Map<string, string>((PROBLEMS as any[]).map((p) => [p[0], (PATTERNS as string[])[p[3]]]));
@@ -19,7 +20,7 @@ const patternOf = new Map<string, string>((PROBLEMS as any[]).map((p) => [p[0], 
 export function summarizeDsa(raw: any, today: string): DsaSummary {
   const patterns: Record<string, DsaPattern> = {};
   for (const name of PATTERNS as string[]) patterns[name] = { name, alone: 0, help: 0, planned: 0, verified: 0 };
-  const empty = { todayTotal: 0, todayLeft: 0, leftovers: 0, todayPatterns: [], todayTitles: [], nextSlug: null, leftByDate: {} as Record<string, number> };
+  const empty = { todayTotal: 0, todayLeft: 0, leftovers: 0, todayPatterns: [], todayTitles: [], nextSlug: null, leftByDate: {} as Record<string, number>, think: {} as DsaSummary["think"] };
   if (!raw || raw.version !== 2) return { hasPlan: false, source: "", patterns, soloToday: 0, doneToday: 0, streakDays: 0, activeDays: [], ...empty };
   const status: Record<string, string> = raw.progress?.status || {};
   const when: Record<string, string> = raw.progress?.when || {};
@@ -53,9 +54,10 @@ export function summarizeDsa(raw: any, today: string): DsaSummary {
     const todayLeft = todays.filter((p: any) => !done(p.slug));
     day = { todayTotal: todays.length, todayLeft: todayLeft.length, leftovers: left.length, leftByDate,
       todayPatterns: [...new Set<string>(todays.map((p: any) => p.pattern))], todayTitles: todays.map((p: any) => p.title),
-      nextSlug: (left[0] || todayLeft[0] || null)?.slug || null };
+      nextSlug: (left[0] || todayLeft[0] || null)?.slug || null, think: {} };
   }
-  return { hasPlan: !!prof.onboarded, source: names, patterns, soloToday, doneToday, streakDays: streakOfDays(activeDays), activeDays, ...day };
+  const think = thinkStats(raw.progress?.attempts, (slug: string) => patternOf.get(slug) || "") as DsaSummary["think"];
+  return { hasPlan: !!prof.onboarded, source: names, patterns, soloToday, doneToday, streakDays: streakOfDays(activeDays), activeDays, ...day, think };
 }
 
 function streakOfDays(days: string[], now = new Date()): number {

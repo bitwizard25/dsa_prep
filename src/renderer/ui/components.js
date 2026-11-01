@@ -2,7 +2,7 @@
 import { DIFF, companyTags, isCompanyPlan, toIds } from "../core/problems.js";
 import { store } from "../core/state.js";
 import { status } from "../core/practice.js";
-import { isVerifiedAlone } from "../core/reasoning.js";
+import { isVerifiedAlone, latestAttempt, isV2 } from "../core/reasoning.js";
 
 export const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
@@ -37,11 +37,13 @@ function tagHtml(p) {
 export function problemRow(p, curSlug) {
   const st = status(p.slug);
   const verified = st === "a" && isVerifiedAlone(store.S.progress, p.slug);
+  const prior = latestAttempt(store.S.progress, p.slug);
+  const v1 = prior && prior.think && !isV2(prior.think);
   return `<li class="item ${st ? "st-" + st : ""} ${verified ? "verified" : ""} ${p.slug === curSlug ? "cur" : ""}">
     ${diffMark(p.d)}
     <div class="body">
       <button class="link" data-act="open" data-slug="${p.slug}">${esc(p.title)}</button>
-      <span class="meta">${st ? `<span class="chk" aria-hidden="true">✓</span>` : ""}${p.n !== "?" ? "#" + p.n : ""}${tagHtml(p)}</span>
+      <span class="meta">${st ? `<span class="chk" aria-hidden="true">✓</span>` : ""}${p.n !== "?" ? "#" + p.n : ""}${v1 ? `<span class="tag core" title="Recorded before Think-first v2. The mark is unchanged.">v1</span>` : ""}${tagHtml(p)}</span>
     </div>
     <div class="seg" role="group" aria-label="Mark ${esc(p.title)}">
       <button class="a ${st === "a" ? "on" : ""}" data-act="mark" data-slug="${p.slug}" data-st="a" aria-pressed="${st === "a"}" title="Solved on my own">Alone</button>

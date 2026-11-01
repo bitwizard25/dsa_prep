@@ -124,6 +124,9 @@ export function ProgressScreen(ctx: Ctx) {
           <span class={pc <= -2 ? "warn-t" : "muted"}>{pc <= -2 ? `${-pc} days behind` : pc >= 2 ? `${pc} days ahead` : "on pace"}</span></li>;
       })}</ul>
     </Section>
+    {dsa && Object.entries(dsa.think || {}).some(([, s]) => s.v1 || s.v2) && <Section title="Think-first by pattern">
+      <ul class="mini-bars wide">{Object.entries(dsa.think).filter(([, s]) => s.v1 || s.v2).map(([name, s]) => <li><span>{name}{s.v1 ? ` · ${s.v1} v1` : ""}</span><span class="muted">{s.v2 ? `chain ${s.chain == null ? "–" : Math.round(s.chain * 100) + "%"}, understood ${s.understand == null ? "–" : Math.round(s.understand * 100) + "%"}, gate ${s.gateSec == null ? "–" : s.gateSec + "s"}, matched ${s.matched == null ? "–" : Math.round(s.matched * 100) + "%"}` : "v1 only"}</span></li>)}</ul>
+    </Section>}
     <details class="more"><summary>How these numbers are calculated</summary>
       <p>DSA comes from your practice app. Recorded Think-first solves without opening the solution count fully; other alone marks count half, and help counts a quarter. For OOPS, OS, DBMS and CN, a topic's latest quiz score counts 60% and study time against its planned time 40%. Before you take a topic's quiz, your self-rating after sessions stands in for it. LLD and System Design use time and self-rating until mock rounds arrive.</p>
     </details>

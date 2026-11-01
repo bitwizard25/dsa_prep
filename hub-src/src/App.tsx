@@ -18,7 +18,7 @@ const START = (location.hash.slice(1) || "today").split("?")[0];
 export function App() {
   const hub = useHub();
   const [route, setRoute] = useState<{ name: string; arg?: any }>({ name: START });
-  const [planMode, setPlanMode] = useState(false);
+  const [planMode, setPlanMode] = useState(START === "plan");
   const [dsa, setDsa] = useState<DsaSummary | undefined>();
   const [reminderTick, setReminderTick] = useState(0);
   const plan = useMemo(() => (hub.goal ? buildPlan(hub.goal) : null), [hub.goal]);
@@ -33,7 +33,7 @@ export function App() {
 
   // DSA progress comes from the practice app's own data; refresh whenever the Hub comes back into view.
   const refreshDsa = () => api.loadState().then((raw) => { const d = summarizeDsa(raw, todayKey()); setDsaTruth(d); setDsa(d); });
-  useEffect(() => { refreshDsa(); api.onHubFocus(refreshDsa); api.onHubRoute((r) => { setPlanMode(false); go(r); }); api.onRemindersRefresh?.(() => setReminderTick((n) => n + 1)); }, []);
+  useEffect(() => { refreshDsa(); api.onHubFocus(refreshDsa); api.onHubRoute((r) => { if (r === "plan") { setPlanMode(true); return; } setPlanMode(false); go(r); }); api.onRemindersRefresh?.(() => setReminderTick((n) => n + 1)); }, []);
 
   // A downloaded update may restart only when this page is not in the middle of a session.
   useEffect(() => { api.setSessionBusy(route.name === "session" || route.name === "quiz"); }, [route.name]);

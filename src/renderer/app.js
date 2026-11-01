@@ -3,7 +3,7 @@ import { store, freshProfile } from "./core/state.js";
 import * as R from "./core/reasoning.js";
 import * as A from "./core/attempts.js";
 import * as P from "./core/practice.js";
-import { syncPracticePlan } from "./core/hub-sync.js";
+import { syncPracticePlan, planOwnedByHub } from "./core/hub-sync.js";
 import * as T from "./core/timer.js";
 import * as Onb from "./screens/onboarding.js";
 import * as Ws from "./screens/workspace.js";
@@ -99,6 +99,7 @@ function commitPlan(d) {
 async function syncHub() {
   const hub = await api.hubLoad();
   const synced = syncPracticePlan(hub, store.S.profile);
+  store.S.profile.hubOwned = synced.owned;
   if (!synced.changed) return;
   store.S.profile = synced.profile;
   store.saveNow();
@@ -208,7 +209,7 @@ function beginAttempt(slug) {
   const disk = (store.S.progress.open || {})[slug] || null;
   const { attempt } = A.resolveAttempt(openAttempts, seen, slug, () => ({
     slug, start: Date.now(), sawAt: null, gate, unlocked: !gate, unlockedAt: gate ? null : Date.now(),
-    think: { complexity: "", brute: "", waste: "", pattern: null, patternTries: 0, patternCorrect: false, patternUnconfirmed: false, skipped: false, complexityWarning: "" }, facts: null, nudge: "", explain: null,
+    think: { version: 2, step: 1, skipped: false, exampleResult: "", exampleTyped: "", complexity: "", brute: "", bruteComplexity: "", waste: "", fix: "", pattern: null, patternTries: 0, patternCorrect: false, patternUnconfirmed: false, chainTries: 0, chainCorrect: false, bruteFits: false, contradiction: false, edges: [], gateStarted: Date.now(), gateMs: 0, finalComplexity: "", selfGrade: "", missed: "", complexityWarning: "" }, facts: null, nudge: "", explain: null,
   }), disk, gate);
   ctx.attempt = attempt;
   const locked = attempt.gate && !attempt.unlocked;
@@ -223,7 +224,9 @@ async function loadFacts(attempt) {
   if (ctx.attempt !== attempt) return;
   const c = R.parseConstraints(meta?.content || "");
   const known = Number.isInteger(primary) && primary >= 0 && primary < PATTERNS.length;
-  attempt.facts = { n: c.n, lines: c.lines, tags: meta?.tags || [], accepted: R.acceptedPatterns(known ? primary : -1, meta?.tags || []), live: !!meta, unverifiable: !known };
+  const tags = meta?.tags || [];
+  attempt.facts = { n: c.n, lines: c.lines, tags, example: R.parseExample(meta?.content || ""), accepted: R.acceptedPatterns(known ? primary : -1, tags), live: !!meta, unverifiable: !known };
+  if (attempt.think?.version === 2 && !attempt.think.gateStarted) attempt.think.gateStarted = Date.now();
   if (document.activeElement?.dataset?.think) return; // do not erase text while typing
   render();
 }
@@ -277,6 +280,52 @@ function reopen(slug) {
 const attemptMins = () => (ctx.attempt ? Math.max(0, Math.round((Date.now() - ctx.attempt.start) / 60000)) : 0);
 function toggleSidebar() { if (gating() && !store.S.ui.collapsed) { flash("Finish Think-first before collapsing the sidebar."); return; } store.S.ui.collapsed = !store.S.ui.collapsed; store.save(); applyLayout(); render(); }
 
+function advanceThink(a) {
+  const t = a.think, f = a.facts;
+  if (!f) { a.nudge = "Still reading the problem. You can skip."; render(); return; }
+  const step = t.step || 1;
+  a.nudge = "";
+  if (step <= 1) {
+    if (!f.example) { a.nudge = "Work an example by hand, or skip."; render(); return; }
+    if (R.outputsMatch(t.exampleTyped, f.example.output)) t.exampleResult = "correct";
+    else { t.exampleResult = "misunderstood"; a.nudge = `Output is ${f.example.output}. You can continue; this try can't count as solved alone.`; }
+    t.step = 2;
+  } else if (step === 2) {
+    if (!R.COMPLEXITIES.includes(t.complexity)) { a.nudge = "Pick a target complexity."; render(); return; }
+    const slow = R.fitsBudget(t.complexity, f.n) === "too-slow";
+    t.complexityWarning = slow ? `With n up to ${f.n.toLocaleString("en-IN")}, ${t.complexity} may be too slow. Consider ${R.budgetFor(f.n)} or better.` : "";
+    t.step = 3;
+  } else if (step === 3) {
+    if (!R.wordsOk(t.brute, 2)) { a.nudge = "Describe the brute force in a few words."; render(); return; }
+    if (!R.COMPLEXITIES.includes(t.bruteComplexity)) { a.nudge = "Pick the brute-force complexity."; render(); return; }
+    const j = R.judgeBrute(t.complexity, t.bruteComplexity, f.n);
+    t.bruteFits = j.bruteFits; t.contradiction = j.contradiction;
+    if (j.contradiction && !t.contradictionSeen) { t.contradictionSeen = true; a.nudge = "That brute force is faster than the target you picked. Check both, then continue."; render(); return; }
+    if (j.bruteFits) { t.chainCorrect = true; t.chainTries = 1; t.patternCorrect = true; t.patternTries = 1; t.step = 6; }
+    else t.step = 4;
+  } else if (step === 4) {
+    if (!t.waste) { a.nudge = "Pick the waste."; render(); return; }
+    t.step = 5;
+  } else if (step === 5) {
+    if (!t.fix) { a.nudge = "Pick the fix."; render(); return; }
+    const j = R.judgeChain(t.waste, t.fix, f.tags);
+    t.chainTries = (t.chainTries || 0) + 1;
+    t.chainCorrect = j.chainCorrect && t.chainTries === 1;
+    t.pattern = j.patterns[0] ?? t.pattern;
+    t.patternTries = t.chainTries;
+    t.patternCorrect = !!j.chainCorrect;
+    if (!j.chainCorrect && t.chainTries === 1) {
+      a.nudge = j.unverifiable
+        ? "No specific tag to check this chain against. You can continue; it can't count as solved alone."
+        : j.fixMatches ? "That fix doesn't match this problem's tags. The first try is the one that counts."
+        : "That fix doesn't match the waste. The first try is the one that counts.";
+      persistOpen(); render(); return;
+    }
+    t.step = 6;
+  }
+  persistOpen(); render();
+}
+
 // ---------- actions ----------
 const actions = {
   // onboarding
@@ -321,7 +370,13 @@ const actions = {
     P.mark(slug, st);
     if (recording) reopen(slug);
     render(); },
+  "think-hand": () => { const a = ctx.attempt; if (!a || !gating() || a.think.version !== 2) return; a.think.exampleResult = "unverified"; a.think.step = 2; a.nudge = ""; persistOpen(); render(); },
+  "think-next": () => { const a = ctx.attempt; if (!a || !gating() || a.think.version !== 2) return; advanceThink(a); },
   "think-unlock": () => { const a = ctx.attempt; if (!a || !gating()) return;
+    if (a.think.version === 2) {
+      if ((a.think.edges || []).length < 2) { a.nudge = "Tick at least two edge cases."; render(); return; }
+      a.think.gateMs = R.gateElapsed(a.think); a.nudge = ""; unlock(); return;
+    }
     if (!a.facts) { a.nudge = "Checking problem details. You can also skip this step."; render(); return; }
     const { problems, patternRight, warning, unverifiable } = R.checkThink(a.think, a.facts);
     if (problems.length) { a.nudge = problems[0]; render(); return; }
@@ -331,18 +386,33 @@ const actions = {
     if (patternRight === false && a.think.patternTries < 2) { a.nudge = "That pattern may not fit. Re-read the constraints and your brute force."; render(); return; }
     if (patternRight !== true) a.think.patternUnconfirmed = true;
     unlock(); },
-  "think-skip": () => { if (!gating()) return; ctx.attempt.think.skipped = true; unlock(); },
+  "think-skip": () => { if (!gating()) return; const t = ctx.attempt.think; t.skipped = true; if (t.version === 2) t.gateMs = R.gateElapsed(t); unlock(); },
   next: openNext,
   timer: toggleTimer,
   start: oneTapStart,
   "mark-cur": (el) => { markCurrent(el.dataset.st); },
+  grade: (el) => { if (!ctx.accepted) return; ctx.accepted.selfGrade = el.dataset.v; render(); },
+  "hub-plan": () => { store.saveNow(); api.openHub("plan"); },
   "accept-mark": (el) => { const a = ctx.accepted, st = el.dataset.st; if (!a) return;
-    if (!R.wordsOk(a.insight)) { flash("Write the key insight in a few words first."); return; }
     const own = attemptFor(a.slug);
-    const elig = R.eligibility(buildRecord(own, st, { accepted: true, manual: false, explain: { why: a.why.trim(), insight: a.insight.trim() } }, a.slug));
+    const v2 = own?.think?.version === 2;
+    let explain;
+    if (v2) {
+      if (!a.selfGrade) { flash("Pick how close you were to the editorial."); return; }
+      if (!R.COMPLEXITIES.includes(a.finalComplexity)) { flash("Pick the complexity of the code you submitted."); return; }
+      if (a.selfGrade !== "matched" && !R.wordsOk(a.missed, 2)) { flash("Write one line on what you missed."); return; }
+      own.think.finalComplexity = a.finalComplexity;
+      own.think.selfGrade = a.selfGrade;
+      own.think.missed = (a.missed || "").trim();
+      explain = { why: a.finalComplexity, insight: a.selfGrade === "matched" ? "Matched the editorial." : own.think.missed };
+    } else {
+      if (!R.wordsOk(a.insight)) { flash("Write the key insight in a few words first."); return; }
+      explain = { why: (a.why || "").trim(), insight: a.insight.trim() };
+    }
+    const elig = R.eligibility(buildRecord(own, st, { accepted: true, manual: false, explain }, a.slug));
     if (st === "a" && !elig.alone) { flash(elig.reasons[0] || "This one counts as needed help."); return; }
     const wasDue = !!(store.S.progress.redo?.[a.slug] && store.S.progress.redo[a.slug].due <= todayKey());
-    if (!commitAttempt(a.slug, buildRecord(own, st, { accepted: true, manual: false, explain: { why: a.why.trim(), insight: a.insight.trim() } }, a.slug))) return;
+    if (!commitAttempt(a.slug, buildRecord(own, st, { accepted: true, manual: false, explain }, a.slug))) return;
     P.acceptResult(a.slug, st);
     const remains = !!store.S.progress.redo?.[a.slug];
     reopen(a.slug);
@@ -396,6 +466,7 @@ document.addEventListener("mousedown", (e) => {
 document.addEventListener("input", (e) => {
   const t = e.target;
   if (t.dataset?.think && ctx.attempt && t.tagName !== "SELECT") { ctx.attempt.think[t.dataset.think] = t.value; persistOpen(); }
+  if (t.id === "exMissed" && ctx.accepted) { ctx.accepted.missed = t.value; persistOpen(); }
   if (t.id === "exWhy" && ctx.accepted) { ctx.accepted.why = t.value; persistOpen(); }
   if (t.id === "exInsight" && ctx.accepted) { ctx.accepted.insight = t.value; persistOpen(); }
   if (t.id === "import") { ctx.importText = t.value; const n = parseImport(t.value).length; const s = t.parentElement.querySelector(".muted"); if (s) s.textContent = `${n} problems recognised`; const b = t.parentElement.querySelector("[data-act=use-import]"); if (b) b.disabled = !n; }
@@ -417,7 +488,19 @@ document.addEventListener("change", (e) => {
   if (t.dataset?.think && ctx.attempt && t.tagName === "SELECT") {
     ctx.attempt.think[t.dataset.think] = t.dataset.think === "pattern" ? (t.value === "" ? null : +t.value) : t.value;
     persistOpen();
-    if (t.dataset.think === "complexity") render();
+    if (t.dataset.think === "complexity" || t.dataset.think === "bruteComplexity") render();
+  }
+  if (t.dataset?.edge && ctx.attempt?.think) {
+    const edges = new Set(ctx.attempt.think.edges || []);
+    t.checked ? edges.add(t.dataset.edge) : edges.delete(t.dataset.edge);
+    ctx.attempt.think.edges = [...edges];
+    persistOpen();
+  }
+  if (t.id === "finalCx" && ctx.accepted) {
+    ctx.accepted.finalComplexity = t.value;
+    const n = ctx.attempt?.facts?.n;
+    ctx.accepted.finalWarn = R.fitsBudget(t.value, n) === "too-slow" ? `With n up to ${Number(n).toLocaleString("en-IN")}, ${t.value} may be too slow.` : "";
+    render();
   }
   if (t.id === "targetDate" && t.value) { ctx.draft.targetDate = t.value; render(); }
   if (t.id === "startDate" && t.value) { ctx.draft.startDate = t.value; render(); }
@@ -446,7 +529,7 @@ api.onUrl(async (u) => {
   if (slug) beginAttempt(slug);
   if (!slug) api.cover(false).catch(() => {});
   // Opening the editorial or community solutions: note it, and warn if it's early.
-  if (slug && /\/problems\/[^/]+\/(editorial|solutions)(\/|$|\?)/.test(u) && ctx.attempt && ctx.attempt.slug === slug && !ctx.attempt.sawAt) {
+  if (slug && /\/problems\/[^/]+\/(editorial|solutions)(\/|$|\?)/.test(u) && ctx.attempt && ctx.attempt.slug === slug && !ctx.attempt.sawAt && !(ctx.accepted && ctx.accepted.slug === slug)) {
     ctx.attempt.sawAt = Date.now();
     if (A.markSolutionSeen(solutionSeenMap(), slug, ctx.attempt.sawAt)) persistOpen(true);
     const mins = attemptMins();
@@ -466,7 +549,7 @@ function onAccepted(slug) {
   const own = attemptFor(slug);
   const prior = own?.explain || store.S.progress.open?.[slug]?.explain || { why: "", insight: "" };
   const elig = R.eligibility(buildRecord(own, "a", { accepted: true, manual: false, explain: { why: (prior.why || "").trim(), insight: (prior.insight || "").trim() } }, slug));
-  const blocked = elig.reasons.filter((r) => !/key insight/i.test(r));
+  const blocked = elig.reasons.filter((r) => !/key insight|editorial self-grade/i.test(r));
   ctx.accepted = { slug, suggest: blocked.length ? "h" : "a", mins: own ? attemptMins() : 0, elig, blocked, why: prior.why || "", insight: prior.insight || "" }; render();
 }
 api.onAccepted(onAccepted);
@@ -496,6 +579,12 @@ setInterval(() => {
   }
   const r = document.getElementById("ring");
   if (r) r.setAttribute("stroke-dashoffset", T.ringOffset().toFixed(1));
+  const gc = document.getElementById("gateClock");
+  const think = ctx.attempt?.think;
+  if (gc && think?.version === 2 && think.gateStarted && !ctx.attempt.unlocked) {
+    gc.textContent = String(Math.floor(R.gateElapsed(think) / 60000)).padStart(2, "0") + ":" + String(Math.floor(R.gateElapsed(think) / 1000) % 60).padStart(2, "0");
+    if (R.gateStuck(think) && !think.stuckShown) { think.stuckShown = true; render(); return; }
+  }
   document.title = (store.S.timer.running ? T.mmss(T.left()) + " " : "") + "DSA Practice";
 }, 1000);
 
@@ -543,12 +632,13 @@ window.__flushSaves = () => store.saveNow();
     ...Object.values(hub.progress?.quiz || {}).flat().map((q) => q.date),
   ]);
   const setup = hub && hub.dsaSetup;
-  if (setup && setup.id !== store.S.profile.hubSetupId) {
+  if (setup && setup.id && setup.id !== store.S.profile.hubSetupId && !String(setup.id).startsWith("practice:")) {
     const d = Onb.newDraft();
     Object.assign(d, { sources: setup.sources, patterns: setup.patterns, perPattern: setup.perPattern, hoursPerDay: setup.hoursPerDay,
       daysPerWeek: setup.daysPerWeek, startDate: setup.startDate, targetDate: setup.targetDate, planMode: "hours", skipSolved: true });
-    if (commitPlan(d)) { store.S.profile.hubSetupId = setup.id; store.S.profile.problemsPerDay = setup.problemsPerDay; store.saveNow(); ctx.tab = "today"; }
+    if (commitPlan(d)) { store.S.profile.hubSetupId = setup.id; store.S.profile.problemsPerDay = setup.problemsPerDay; ctx.tab = "today"; }
   }
+  store.S.profile.hubOwned = planOwnedByHub(hub);
   // Plans made before the company dataset (dataVersion 2) are rebuilt; progress is kept.
   if (store.S.profile.onboarded && store.S.profile.dataVersion === 2) {
     // Started from the Hub's DSA session: open the first unsolved problem (leftovers first, then today's).
