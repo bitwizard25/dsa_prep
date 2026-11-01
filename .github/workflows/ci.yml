@@ -42,4 +42,5 @@ jobs:
           xvfb-run -a npx electron tests/electron-cover.cjs
           xvfb-run -a npx electron tests/smoke-think.cjs
           xvfb-run -a npx electron tests/e2e/think-review.cjs
+          xvfb-run -a npx electron tests/e2e/think-v2.cjs
           xvfb-run -a npm run smoke

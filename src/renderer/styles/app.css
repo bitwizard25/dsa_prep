@@ -519,6 +519,8 @@ body { padding-top: 48px; }
 /* ---------- Think first ---------- */
 .think { display: flex; flex-direction: column; gap: 12px; padding: 16px; border-radius: 16px; border: 1px solid rgba(143,193,169,.35); background: #1C232C; }
 .think h2 { margin: 0; font-family: var(--display); font-size: 22px; font-weight: 600; }
+.think .mono { font-family: ui-monospace, monospace; white-space: pre-wrap; background: #151A21; border-radius: 8px; padding: 8px 10px; }
+.think .check { margin: 2px 0; }
 .think p { margin: 0; }
 .think label { display: flex; flex-direction: column; gap: 4px; }
 .think label b { font-size: 13.5px; }

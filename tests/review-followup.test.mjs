@@ -30,4 +30,13 @@ test("practice changes to problems per day, study days and company flow back, an
   assert.equal(stale.hub.goal.problemsPerDay, 3);
   assert.equal(stale.profile.problemsPerDay, 3);
   assert.notEqual(stale.profile.problemsPerDay, Math.round((8 * 60) / 39));
+  const owned = syncPracticePlan({ ...hub, dsaSetup: { id: "{\"problemsPerDay\":3}", problemsPerDay: 3 } }, profile);
+  assert.equal(owned.owned, true);
+  assert.equal(owned.changed, false);
+  assert.equal(owned.hub.goal.company, "google");
+  assert.equal(owned.hub.goal.problemsPerDay, 3);
+  assert.equal(owned.hub.goal.daysPerWeek, 5);
+  const junk = syncPracticePlan({ ...hub, dsaSetup: { id: "{\"problemsPerDay\":3}" } }, { sources: ["nope"], daysPerWeek: 0, problemsPerDay: -4, queue: [] });
+  assert.equal(junk.hub.goal.company, "google");
+  assert.equal(junk.hub.goal.problemsPerDay, 3);
 });

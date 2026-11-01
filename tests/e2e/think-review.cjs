@@ -10,7 +10,7 @@ app.setPath("userData", data);
 const root = process.cwd();
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const META = {
-  content: "<p><strong>Constraints:</strong></p><ul><li><code>1 &lt;= nums.length &lt;= 10<sup>5</sup></code></li><li><code>1 &lt;= m, k &lt;= 10<sup>5</sup></code></li></ul>",
+  content: "<p><strong>Example 1:</strong></p><pre><strong>Input:</strong> nums = [2,7], target = 9\n<strong>Output:</strong> [0,1]</pre><p><strong>Constraints:</strong></p><ul><li><code>1 &lt;= nums.length &lt;= 10<sup>5</sup></code></li></ul>",
   tags: ["Array", "Hash Table"],
 };
 
@@ -64,12 +64,28 @@ app.whenReady().then(async () => {
     }
   };
 
-  await fill("two-sum", { complexity: "O(n^2)", brute: "check every pair of numbers", waste: "repeats scanning the whole list", pattern: "0" });
+  await fill("two-sum", { exampleTyped: "[0,1]" });
+  await js(`document.querySelector('[data-act="think-next"]').click()`);
+  await wait(80);
+  await fill("two-sum", { complexity: "O(n^2)" });
   assert.match(await js(`document.body.innerText`), /too slow/i);
+  await js(`document.querySelector('[data-act="think-next"]').click()`);
+  await wait(80);
+  assert.equal(await js(`window.__dsa.ctx.attempt.unlocked`), false, "a slow estimate must not block the next step");
+  assert.match(await js(`window.__dsa.ctx.attempt.think.complexityWarning`), /too slow/);
+  await fill("two-sum", { brute: "check every pair of numbers", bruteComplexity: "O(n^2)" });
+  await js(`document.querySelector('[data-act="think-next"]').click()`);
+  await wait(80);
+  await fill("two-sum", { waste: "hash" });
+  await js(`document.querySelector('[data-act="think-next"]').click()`);
+  await wait(80);
+  await fill("two-sum", { fix: "hash" });
+  await js(`document.querySelector('[data-act="think-next"]').click()`);
+  await wait(80);
+  await js(`document.querySelectorAll('[data-edge]').forEach((e,i) => { if (i < 2) e.click(); })`);
   await js(`document.querySelector('[data-act="think-unlock"]').click()`);
   await wait(150);
   assert.equal(await js(`window.__dsa.ctx.attempt.unlocked`), true, "a slow estimate must not block unlock");
-  assert.match(await js(`window.__dsa.ctx.attempt.think.complexityWarning`), /too slow/);
   assert.equal(await js(`window.__dsa.store.S.timer.mode`), "break");
   assert.match(await js(`document.body.innerText`), /use a hash map for the complement/);
 
@@ -88,7 +104,17 @@ app.whenReady().then(async () => {
   assert.equal(await js(`window.__dsa.ctx.attempt.unlocked`), true);
   assert.equal(await js(`window.__dsa.store.S.progress.solutionSeen["two-sum"]`), sawAt);
 
-  await fill("valid-parentheses", { complexity: "O(n)", brute: "scan with a stack of openers", waste: "rechecks earlier pairs", pattern: "3" });
+  await fill("valid-parentheses", { exampleTyped: "[0,1]" });
+  await js(`document.querySelector('[data-act="think-next"]').click()`); await wait(60);
+  await fill("valid-parentheses", { complexity: "O(n)" });
+  await js(`document.querySelector('[data-act="think-next"]').click()`); await wait(60);
+  await fill("valid-parentheses", { brute: "scan with a stack of openers", bruteComplexity: "O(n^2)" });
+  await js(`document.querySelector('[data-act="think-next"]').click()`); await wait(60);
+  await fill("valid-parentheses", { waste: "hash" });
+  await js(`document.querySelector('[data-act="think-next"]').click()`); await wait(60);
+  await fill("valid-parentheses", { fix: "hash" });
+  await js(`document.querySelector('[data-act="think-next"]').click()`); await wait(60);
+  await js(`document.querySelectorAll('[data-edge]').forEach((e,i) => { if (i < 2) e.click(); })`);
   await js(`document.querySelector('[data-act="think-unlock"]').click()`);
   await wait(200);
   assert.equal(await js(`window.__dsa.ctx.attempt.unlocked`), true);
@@ -97,7 +123,9 @@ app.whenReady().then(async () => {
   win.webContents.send("accepted", "valid-parentheses");
   await wait(150);
   assert.equal(await js(`document.querySelector('[data-act="accept-mark"][data-st="a"]').disabled`), false);
-  await js(`(() => { const e = document.getElementById("exInsight"); e.value = "push openers and match closers"; e.dispatchEvent(new Event("input", { bubbles: true })); })()`);
+  await js(`document.querySelector('[data-act="grade"][data-v="matched"]').click()`);
+  await js(`(() => { const e = document.getElementById("finalCx"); e.value = "O(n)"; e.dispatchEvent(new Event("change", { bubbles: true })); })()`);
+  await wait(50);
   await js(`document.querySelector('[data-act="accept-mark"][data-st="a"]').click()`);
   await wait(200);
   assert.equal(await js(`window.__dsa.store.S.progress.status["valid-parentheses"]`), "a");
