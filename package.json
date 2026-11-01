@@ -1,6 +1,6 @@
 {
   "name": "dsa-practice",
-  "version": "2.4.0",
+  "version": "2.5.0",
   "description": "Personal LeetCode practice app: company-based plans, focus timer, streaks, all saved locally",
   "repository": {
     "type": "git",

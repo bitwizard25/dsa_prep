@@ -30,3 +30,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: false
+      - name: Publish one release with the exe, blockmap, and latest.yml
+        run: node tools/publish-release.js
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

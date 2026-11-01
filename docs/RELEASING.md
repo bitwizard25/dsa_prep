@@ -4,12 +4,12 @@ The installed Windows app updates itself from GitHub Releases. One manual instal
 
 ## Publish a version
 
-1. Bump `version` in `package.json` to the new number, for example `2.4.0`. Commit that change on the branch you want to ship.
+1. Bump `version` in `package.json` to the new number, for example `2.5.0`. Commit that change on the branch you want to ship.
 2. Tag that commit with the same number and a leading `v`:
 
 ```
-git tag v2.4.0
-git push origin v2.4.0
+git tag v2.5.0
+git push origin v2.5.0
 ```
 
 3. The Release workflow (`.github/workflows/release.yml`) runs on `windows-latest`. It builds the Hub, writes `src/build-info.json` with the short commit and the build time, then `electron-builder` builds the NSIS installer and uploads three files to a GitHub Release for that tag:
@@ -18,7 +18,7 @@ git push origin v2.4.0
 - `dsa_prep_setup_<version>.exe.blockmap`
 - `latest.yml`
 
-The workflow uses the built-in `GITHUB_TOKEN`. It does not need any other secret. The release is a normal public release, not a draft and not a prerelease. Drafts are invisible to the app.
+The workflow uses the built-in `GITHUB_TOKEN`. It does not need any other secret. electron-builder may open two draft releases for the same tag, one for the installer and one for the blockmap. The workflow copies every file onto one release, deletes the extra draft, and publishes that release. The result is a normal public release, not a draft and not a prerelease. Drafts are invisible to the app.
 
 The installer is built with `differentialPackage: "store-asar"`, so the blockmap can skip unchanged parts of the app. The installer file is larger. The download on a later update is smaller.
 

@@ -30,7 +30,7 @@ test("a missing stamp file is a development build", () => {
   assert.deepEqual(readBuildInfo(file), { commit: null, builtAt: null });
   writeBuildInfo(file, { commit: "abc1234", builtAt: "2026-11-01T00:00:00.000Z" });
   const read = readBuildInfo(file);
-  assert.equal(presentAbout({ phase: "idle", ready: false }, { appVersion: "2.4.0", ...read }).buildLabel, "abc1234 · 1 Nov 2026");
+  assert.equal(presentAbout({ phase: "idle", ready: false }, { appVersion: "2.5.0", ...read }).buildLabel, "abc1234 · 1 Nov 2026");
   assert.equal(shortSha("0123456789abcdef"), "0123456");
   assert.equal(shortSha("nope"), null);
   assert.match(resolveCommit({ GITHUB_SHA: "deadbeefcafebabe" }), /^deadbee$/);
@@ -38,7 +38,7 @@ test("a missing stamp file is a development build", () => {
 
 test("the practice About block shows version, build, status, and the check button", () => {
   const html = aboutInner({
-    appVersion: "2.4.0",
+    appVersion: "2.5.0",
     buildLabel: "abc1234 · 1 Nov 2026",
     label: "Up to date",
     phase: "uptodate",
@@ -47,7 +47,7 @@ test("the practice About block shows version, build, status, and the check butto
     detail: "",
     lastCheckedAt: null,
   });
-  assert.match(html, /Version <b>2\.4\.0<\/b>/);
+  assert.match(html, /Version <b>2\.5\.0<\/b>/);
   assert.match(html, /abc1234 · 1 Nov 2026/);
   assert.match(html, /Up to date/);
   assert.match(html, /Last checked not yet/);
@@ -56,9 +56,9 @@ test("the practice About block shows version, build, status, and the check butto
   assert.equal(escaped.includes("<script>"), false);
   assert.match(escaped, /&lt;script&gt;/);
   assert.match(escaped, /&lt;b&gt;no&lt;\/b&gt;/);
-  const ready = aboutInner({ appVersion: "2.4.0", buildLabel: "Development build", label: "Update ready, restart to install", phase: "ready", ready: true, available: "2.5.0", lastCheckedAt: 1 });
+  const ready = aboutInner({ appVersion: "2.5.0", buildLabel: "Development build", label: "Update ready, restart to install", phase: "ready", ready: true, available: "2.6.0", lastCheckedAt: 1 });
   assert.match(ready, /Restart now/);
-  assert.match(ready, /Available 2\.5\.0/);
+  assert.match(ready, /Available 2\.6\.0/);
 });
 
 test("both screens keep a visible version and an About check", () => {

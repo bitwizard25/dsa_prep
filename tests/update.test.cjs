@@ -70,7 +70,7 @@ test("a failed check is swallowed", async () => {
 test("a download while a session is busy waits, then offers a silent restart", async () => {
   const { c, updater, notes, flushed } = controller();
   c.setBusy(true);
-  updater.emit("update-downloaded", { version: "2.4.0" });
+  updater.emit("update-downloaded", { version: "2.5.0" });
   assert.equal(notes.length, 1);
   assert.equal(notes[0].ready, false);
   assert.equal(notes[0].busy, true);
@@ -78,14 +78,14 @@ test("a download while a session is busy waits, then offers a silent restart", a
   assert.deepEqual(await c.requestRestart(), { ok: false, reason: "busy" });
   assert.equal(updater.installs.length, 0);
   assert.equal(c.status().ready, false);
-  assert.equal(c.status().version, "2.4.0");
+  assert.equal(c.status().version, "2.5.0");
   assert.equal(c.status().label, "Update ready. It installs after this session.");
 
   c.setBusy(false);
   assert.equal(notes.at(-1).ready, true);
   assert.equal(notes.at(-1).announce, true);
   assert.equal(c.status().ready, true);
-  assert.equal(c.status().version, "2.4.0");
+  assert.equal(c.status().version, "2.5.0");
   assert.equal(c.status().label, "Update ready, restart to install");
   assert.deepEqual(await c.requestRestart(), { ok: true });
   assert.equal(flushed(), 1);
@@ -138,6 +138,7 @@ test("the release workflow is valid YAML and publishes with GITHUB_TOKEN only", 
   assert.equal(doc.permissions.contents, "write");
   assert.match(text, /electron-builder --win nsis --x64 --publish always/);
   assert.match(text, /node tools\/write-build-info\.js/);
+  assert.match(text, /node tools\/publish-release\.js/);
   const secrets = [...text.matchAll(/secrets\.([A-Z0-9_]+)/g)].map((m) => m[1]);
   assert.deepEqual([...new Set(secrets)], ["GITHUB_TOKEN"]);
   const pkg = JSON.parse(fs.readFileSync(path.resolve("package.json"), "utf8"));
@@ -151,10 +152,10 @@ test("the release workflow is valid YAML and publishes with GITHUB_TOKEN only", 
 });
 
 test("a check reports up to date, and a manual check ignores the wait", async () => {
-  const { c, updater } = controller({ about: { appVersion: "2.4.0", commit: "abc1234def", builtAt: "2026-11-01T06:00:00.000Z" } });
+  const { c, updater } = controller({ about: { appVersion: "2.5.0", commit: "abc1234def", builtAt: "2026-11-01T06:00:00.000Z" } });
   assert.equal(c.status().phase, "idle");
   assert.equal(c.status().label, "Not checked yet");
-  assert.equal(c.status().appVersion, "2.4.0");
+  assert.equal(c.status().appVersion, "2.5.0");
   assert.equal(c.status().buildLabel, "abc1234 · 1 Nov 2026");
   assert.equal((await c.check(1_000)).checked, true);
   assert.equal(c.status().phase, "uptodate");
