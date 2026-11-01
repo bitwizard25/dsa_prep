@@ -32,6 +32,14 @@ function render() {
   $app.innerHTML = (ctx.route === "onboarding" ? Onb.render(ctx) : Ws.render(ctx)) + confirmHtml();
   document.body.dataset.route = ctx.route;
   document.body.classList.toggle("collapsed", ctx.route === "workspace" && store.S.ui.collapsed);
+  reportBusy();
+}
+let lastBusy = null;
+function reportBusy() {
+  const busy = gating() || (store.S.timer.running && store.S.timer.mode === "work");
+  if (busy === lastBusy || typeof api.setSessionBusy !== "function") return;
+  lastBusy = busy;
+  api.setSessionBusy(busy).catch(() => {});
 }
 function applyLayout() {
   const ui = store.S.ui, ws = ctx.route === "workspace";

@@ -35,6 +35,22 @@ export function App() {
   const refreshDsa = () => api.loadState().then((raw) => { const d = summarizeDsa(raw, todayKey()); setDsaTruth(d); setDsa(d); });
   useEffect(() => { refreshDsa(); api.onHubFocus(refreshDsa); api.onHubRoute((r) => { setPlanMode(false); go(r); }); api.onRemindersRefresh?.(() => setReminderTick((n) => n + 1)); }, []);
 
+  // A downloaded update may restart only when this page is not in the middle of a session.
+  useEffect(() => { api.setSessionBusy(route.name === "session" || route.name === "quiz"); }, [route.name]);
+  useEffect(() => {
+    let shown = false;
+    const show = () => {
+      if (shown) return;
+      shown = true;
+      toast({
+        title: "Update ready", body: "Restart now?", sticky: true,
+        action: { label: "Restart now", run: () => { saveNow().then(() => api.installUpdate()).then((r) => { if (r && r.ok === false && r.reason === "busy") { shown = false; toast({ title: "Update ready", body: "It will install after this session.", sticky: true }); } }); } },
+      });
+    };
+    api.updateStatus().then((s) => { if (s && s.ready) show(); }).catch(() => {});
+    api.onUpdateReady(() => show());
+  }, []);
+
   // Reminders: hand today's remaining sessions to the main process, which shows system notifications.
   useEffect(() => {
     if (!plan) return;
