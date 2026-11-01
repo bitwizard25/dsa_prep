@@ -176,19 +176,19 @@ test("download progress is a percent, and an error hides tokens", async () => {
   assert.equal(c.status().label, "Downloading 42%");
   assert.equal(statuses.at(-1).label, "Downloading 42%");
   updater.emit("update-downloaded", { version: "9.9.9" });
-  updater.emit("error", new Error("401 unauthorized token ghp_abcdefghijklmnopqrstuvwxyz https://github.com/secret"));
+  updater.emit("error", new Error("401 unauthorized token example-not-real https://example.test/hidden"));
   c.setBusy(false);
   assert.equal(c.status().phase, "ready");
   assert.equal(c.status().label, "Update ready, restart to install");
-  assert.equal(JSON.stringify(c.status()).includes("ghp_"), false);
+  assert.equal(JSON.stringify(c.status()).includes("example-not-real"), false);
 
   const failed = controller();
-  failed.updater.emit("error", new Error("bad token ghp_abcdefghijklmnopqrstuvwxyz"));
+  failed.updater.emit("error", new Error("bad token example-not-real"));
   const view = failed.c.status();
   assert.equal(view.phase, "error");
   assert.equal(view.label, "Error");
   assert.equal(view.detail, "Could not reach GitHub");
-  assert.equal(JSON.stringify(view).includes("ghp_"), false);
+  assert.equal(JSON.stringify(view).includes("example-not-real"), false);
 });
 
 test("an unpackaged app never looks online, and offline is a status", async () => {

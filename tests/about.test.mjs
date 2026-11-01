@@ -17,7 +17,7 @@ test("the build line uses a short commit and a UTC date, or says it is a develop
 });
 
 test("errors shown in About never include a token or a URL", () => {
-  assert.equal(safeDetail(new Error("request failed token ghp_supersecretvalue")), "Could not reach GitHub");
+  assert.equal(safeDetail(new Error("request failed token example-not-real")), "Could not reach GitHub");
   assert.equal(safeDetail(new Error("getaddrinfo ENOTFOUND github.com")), "Could not reach GitHub");
   const text = safeDetail(new Error("No published versions"));
   assert.equal(text, "No published versions");
